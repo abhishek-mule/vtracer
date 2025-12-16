@@ -1,6 +1,3 @@
-Bhai, yeh **Day 1 se Day 3 tak ka complete README** hai – bilkul ready, professional aur interview-ready.  
-GitHub pe jaake `README.md` file mein pura replace kar de. Repo instantly elite level ka lagega.
-
 ```markdown
 # vtracer
 
@@ -19,6 +16,7 @@ Zero code change. Attach to any running Java application. Instantly see method e
 ✅ Day 3: Dynamic attach + real Spring Boot app tracing (Tomcat internals visible)  
 
 Live demo: Attach to running Spring Boot app → see `Http11Processor.recycle()` took 16.81 ms
+<img width="1345" height="656" alt="image" src="https://github.com/user-attachments/assets/f0ce2952-7d56-4348-b4c8-fbc0a862568a" />
 
 ---
 
