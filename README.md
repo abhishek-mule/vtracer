@@ -1,5 +1,5 @@
 ```markdown
-# vtracer
+vtracer
 
 **Low-overhead JVM agent for runtime method tracing (Java 21+)**
 
@@ -136,3 +136,4 @@ Learning JVM internals, one day at a time.
 
 Last updated: Day 3 Complete (Dynamic Attach Success)
 ```
+
