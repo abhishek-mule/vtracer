@@ -29,6 +29,8 @@ Live demo: Attach to running Spring Boot app → see `Http11Processor.recycle()`
 - No restart, no code change, no configuration
 
 Example log after dynamic attach::
+<img width="1345" height="656" alt="image" src="https://github.com/user-attachments/assets/f0ce2952-7d56-4348-b4c8-fbc0a862568a" />
+
 ```
 [vtracer] Agent loaded – starting ByteBuddy instrumentation
 [vtracer] Instrumentation complete – method timing active!
@@ -134,5 +136,6 @@ Learning JVM internals, one day at a time.
 
 Last updated: Day 3 Complete (Dynamic Attach Success)
 ```
+
 
 
