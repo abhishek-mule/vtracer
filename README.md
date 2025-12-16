@@ -1,5 +1,4 @@
-```markdown
-vtracer
+# vtracer
 
 **Low-overhead JVM agent for runtime method tracing (Java 21+)**
 
@@ -16,7 +15,6 @@ Zero code change. Attach to any running Java application. Instantly see method e
 ✅ Day 3: Dynamic attach + real Spring Boot app tracing (Tomcat internals visible)  
 
 Live demo: Attach to running Spring Boot app → see `Http11Processor.recycle()` took 16.81 ms
-<img width="1345" height="656" alt="image" src="https://github.com/user-attachments/assets/f0ce2952-7d56-4348-b4c8-fbc0a862568a" />
 
 ---
 
@@ -30,7 +28,7 @@ Live demo: Attach to running Spring Boot app → see `Http11Processor.recycle()`
 - Overhead < 2% (tested with k6 at 800 VUs)
 - No restart, no code change, no configuration
 
-Example log after dynamic attach:
+Example log after dynamic attach::
 ```
 [vtracer] Agent loaded – starting ByteBuddy instrumentation
 [vtracer] Instrumentation complete – method timing active!
@@ -136,4 +134,5 @@ Learning JVM internals, one day at a time.
 
 Last updated: Day 3 Complete (Dynamic Attach Success)
 ```
+
 
