@@ -1,16 +1,34 @@
-﻿# vtracer
+# vtracer
 
-Low-overhead JVM agent for virtual thread pinning detection in Spring Boot apps.
+**Low-overhead JVM agent for runtime method tracing (Java 21+)**
 
-        ## Day 1 – Premain Agent
+Zero code change. Attach to any running Java application. Instantly see method execution times.
 
-- Agent successfully loads via -javaagent
-        - Prints loading message
-- Instrumentation object available
-- TestApp runs normally with agent attached
+> This is a developer tool for backend engineers, SREs, and platform teams who need to understand request performance at the JVM level.
 
-Output:
+---
 
-[vtracer] Agent loaded successfully via premain
-Test app running...
-Test app finished
+## 🎯 Current Status (Day 3 Complete – December 2025)
+
+✅ Day 1: Premain agent with successful load message  
+✅ Day 2: ByteBuddy instrumentation – method entry/exit timing  
+✅ Day 3: Dynamic attach + real Spring Boot app tracing (Tomcat internals visible)  
+
+![Uploading image.png…]()
+
+
+Live demo: Attach to running Spring Boot app → see `Http11Processor.recycle()` took 16.81 ms
+
+---
+
+## 🚀 What vtracer Does Right Now
+
+- **Static attach**: `-javaagent` argument se load
+- **Dynamic attach**: Running JVM mein attach (`AttachTool <PID>`)
+- Instruments **all methods** (including framework internals)
+- Prints method execution time in milliseconds
+- Works with platform threads and virtual threads
+- Overhead < 2% (tested with k6 at 800 VUs)
+- No restart, no code change, no configuration
+
+Example log after dynamic attach:
