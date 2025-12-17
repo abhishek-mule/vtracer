@@ -126,19 +126,6 @@ This keeps overhead low and design simple.
 
 ---
 
-## 💡 Why This Matters
-
-This project demonstrates deep understanding of:
-- JVM Instrumentation API
-- ByteBuddy bytecode manipulation
-- Static and dynamic attach
-- Real-world framework internals (Tomcat)
-- Production safety thinking
-
-Perfect for interviews at Google, Meta, Amazon, PhonePe, Zerodha.
-
----
-
 **Built by Abhishek Mule**  
 Learning JVM internals, one day at a time.
 
