@@ -4,7 +4,6 @@ import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.matcher.ElementMatchers;
 import java.lang.instrument.Instrumentation;
-import java.util.Random;
 import jdk.jfr.consumer.RecordingStream;
 
 public class Agent {
@@ -22,13 +21,7 @@ public class Agent {
     private static void startInstrumentation(Instrumentation inst) {
         System.out.println("[vtracer] Agent loaded – sampling rate: 10%, JFR pinning detection enabled");
 
-        // Shutdown hook for final report
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("[vtracer] JVM shutting down – generating final report...");
-            JsonReporter.writeReport();
-        }));
-
-        // JFR for pinning detection
+        // JFR listener (Global)
         rs = new RecordingStream();
         rs.enable("jdk.VirtualThreadPinned");
         rs.onEvent("jdk.VirtualThreadPinned", event -> {
@@ -41,7 +34,7 @@ public class Agent {
         });
         rs.startAsync();
 
-        // ByteBuddy instrumentation
+        // ByteBuddy builder
         new AgentBuilder.Default()
                 .type(ElementMatchers.nameStartsWith("com.example"))
                 .transform((builder, typeDescription, classLoader, javaModule, protectionDomain) ->
@@ -50,18 +43,18 @@ public class Agent {
                                         .and(ElementMatchers.not(ElementMatchers.isSynthetic())))))
                 .installOn(inst);
 
-        System.out.println("[vtracer] Instrumentation + JFR active – ready for tracing!");
+        System.out.println("[vtracer] Instrumentation + JFR active!");
     }
 
     public static class MethodTimer {
         public static volatile boolean tracingEnabled = true;
         private static final double SAMPLING_RATE = 0.10;
-        private static final Random RANDOM = new Random();
-        private static final double CIRCUIT_BREAKER_THRESHOLD_MS = 5000.0; // 5 seconds
+        private static final double CIRCUIT_BREAKER_THRESHOLD_MS = 1000.0;
 
         @Advice.OnMethodEnter
         public static long enter() {
-            if (!tracingEnabled || RANDOM.nextDouble() > SAMPLING_RATE) {
+            // Math.random() is safe and doesn't require external field access in some loaders
+            if (!tracingEnabled || Math.random() > SAMPLING_RATE) {
                 return -1;
             }
             return System.nanoTime();
@@ -74,4 +67,13 @@ public class Agent {
             long durationNs = System.nanoTime() - startTime;
             double durationMs = durationNs / 1_000_000.0;
 
-            System.out.printf("[vtracer] [sampled] Method %s
+            System.out.printf("[vtracer] [sampled] Method %s executed in %.2f ms%n", methodName, durationMs);
+            JsonReporter.addMethodTrace(methodName, durationMs);
+
+            if (durationMs > CIRCUIT_BREAKER_THRESHOLD_MS) {
+                tracingEnabled = false;
+                System.out.println("[vtracer] 🛑 CIRCUIT BREAKER OPENED – tracing disabled");
+            }
+        }
+    }
+}

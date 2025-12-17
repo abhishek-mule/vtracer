@@ -107,6 +107,14 @@ Watch method timing logs in the Spring Boot console.
 - Verified with synchronized block in Spring Boot app
 
 Example:
+![img_1.png](img_1.png)
+
+### Day 6 – JSON Report Generation
+- Structured JSON report on JVM shutdown
+- Includes sampled method timings and pinning events
+- Shutdown hook ensures report is written
+- Verified with graceful shutdown
+Example:
 ![img.png](img.png)
 ---
 

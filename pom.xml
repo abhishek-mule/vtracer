@@ -20,21 +20,26 @@
     </properties>
 
     <dependencies>
+        <!-- ByteBuddy for instrumentation -->
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
             <version>${bytebuddy.version}</version>
         </dependency>
+
+        <!-- Gson for JSON reporting -->
         <dependency>
-            <groupId>org.openjdk.jmc</groupId>
-            <artifactId>flightrecorder</artifactId>
-            <version>8.3.0</version>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
         </dependency>
+
+        <!-- JFR is built-in in Java 21+ – no external dependency needed -->
     </dependencies>
 
     <build>
         <plugins>
-            <!-- Shade plugin – ByteBuddy ko JAR mein merge karega + manifest preserve -->
+            <!-- Shade plugin – dependencies ko JAR mein merge karega + manifest preserve -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
