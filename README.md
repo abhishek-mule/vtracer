@@ -92,6 +92,14 @@ Watch method timing logs in the Spring Boot console.
 - Real Tomcat method tracing (Http11Processor, MimeHeaders, ByteChunk, etc.)
 - Verified with k6 load test (800 VUs, 100% success)
 
+### Day 4 – Virtual Thread Pinning Detection
+- JFR RecordingStream with jdk.VirtualThreadPinned event
+- Pinning detected in synchronized block
+- Warning with thread name and duration
+- Verified in Spring Boot with virtual threads enabled
+
+  Example: <img width="1365" height="649" alt="image" src="https://github.com/user-attachments/assets/8e83f39c-3ae2-4db9-8f6e-9132d7099de2" />
+
 ---
 
 ## ⚡ What This Tool Will NOT Do (Deliberate Omissions)
@@ -118,24 +126,8 @@ This keeps overhead low and design simple.
 
 ---
 
-## 💡 Why This Matters
-
-This project demonstrates deep understanding of:
-- JVM Instrumentation API
-- ByteBuddy bytecode manipulation
-- Static and dynamic attach
-- Real-world framework internals (Tomcat)
-- Production safety thinking
-
-Perfect for interviews at Google, Meta, Amazon, PhonePe, Zerodha.
-
----
-
 **Built by Abhishek Mule**  
 Learning JVM internals, one day at a time.
 
 Last updated: Day 3 Complete (Dynamic Attach Success)
 ```
-
-
-
