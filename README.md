@@ -1,42 +1,42 @@
 # vtracer
 
-**Low-overhead JVM agent for runtime method tracing (Java 21+)**
+**Low-overhead JVM agent for runtime method tracing and virtual thread pinning detection (Java 21+)**
 
-Zero code change. Attach to any running Java application. Instantly see method execution times.
+Zero code change. Attach to any running Java application. Get structured insights into method execution times and virtual thread pinning.
 
 > This is a developer tool for backend engineers, SREs, and platform teams who need to understand request performance at the JVM level.
 
----
-
-## 🎯 Current Status (Day 3 Complete – December 2025)
-
-✅ Day 1: Premain agent with successful load message  
-✅ Day 2: ByteBuddy instrumentation – method entry/exit timing  
-✅ Day 3: Dynamic attach + real Spring Boot app tracing (Tomcat internals visible)  
-
-Live demo: Attach to running Spring Boot app → see `Http11Processor.recycle()` took 16.81 ms
+![Java 21](https://img.shields.io/badge/Java-21-blue)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![GitHub release](https://img.shields.io/github/v/release/abhishek-mule/vtracer)
+![GitHub stars](https://img.shields.io/github/stars/abhishek-mule/vtracer?style=social)
 
 ---
 
-## 🚀 What vtracer Does Right Now
+## 🎯 Current Status (v0.1.0 Released – December 2025)
 
-- **Static attach**: `-javaagent` argument se load
-- **Dynamic attach**: Running JVM mein attach (`AttachTool <PID>`)
-- Instruments **all methods** (including framework internals)
-- Prints method execution time in milliseconds
-- Works with platform threads and virtual threads
-- Overhead < 2% (tested with k6 at 800 VUs)
-- No restart, no code change, no configuration
+✅ Day 1: Premain agent foundation  
+✅ Day 2: ByteBuddy instrumentation – method timing  
+✅ Day 3: Dynamic attach + Tomcat internals tracing  
+✅ Day 4: Virtual thread pinning detection via JFR  
+✅ Day 5: 10% sampling + circuit breaker  
+✅ Day 6: Structured JSON report on shutdown  
+✅ Day 7: Final release with configuration support
 
-Example log after dynamic attach::
-<img width="1345" height="656" alt="image" src="https://github.com/user-attachments/assets/f0ce2952-7d56-4348-b4c8-fbc0a862568a" />
+Live demo: Attach to running Spring Boot app → see pinning warnings and method timings in JSON report.
 
-```
-[vtracer] Agent loaded – starting ByteBuddy instrumentation
-[vtracer] Instrumentation complete – method timing active!
-[vtracer] Method public void org.apache.coyote.http11.Http11Processor.recycle() executed in 16.81 ms
-[vtracer] Method public void org.apache.tomcat.util.http.MimeHeaders.recycle() executed in 0.00 ms
-```
+---
+
+## 🚀 Features
+
+- **Static & dynamic attach** support
+- **Configurable sampling** (YAML file)
+- **Selective instrumentation** (include/exclude packages)
+- **Virtual thread pinning detection** via JFR
+- **Method execution timing**
+- **Circuit breaker** (high latency pe tracing disable)
+- **Structured JSON report** on JVM shutdown
+- Low overhead (< 2% in load tests)
 
 ---
 
@@ -67,39 +67,60 @@ java -cp target/vtracer-1.0.jar com.example.vtracer.AttachTool <PID>
 
 ### 5. Hit endpoints
 - http://localhost:8080/fast
-- http://localhost:8080/slow
+- http://localhost:8080/slow (with synchronized block for pinning)
 
-Watch method timing logs in the Spring Boot console.
+Watch console for sampled timings and pinning warnings.
+
+Graceful shutdown (Ctrl+C) → check `vtracer-report-*.json`
 
 ---
 
-## 📊 Day-by-Day Progress
+## 📊 Usage Examples with Expected Output
 
-### Day 1 – Premain Agent Foundation
-- Agent loads via `-javaagent`
-- Prints loading message and Instrumentation object
-- Verified with TestApp
+### Static Attach
+```bash
+java -javaagent:target/vtracer-1.0.jar -jar your-app.jar
+```
 
-### Day 2 – ByteBuddy Instrumentation
-- Method entry/exit timing using nanoTime
-- Fat JAR with shaded ByteBuddy
-- Works with static attach
-- Verified method duration logging
+Expected console output:
+```
+[vtracer] Agent loaded – sampling rate: 10%, JFR pinning detection enabled
+[vtracer] [sampled] Method public String com.example.DemoController.slow() executed in 2005.34 ms
+[vtracer] ⚠️ PINNING DETECTED! Thread: virtual-123, Duration: 2000123456 ns
+```
 
-### Day 3 – Dynamic Attach Success
-- `AttachTool` using VirtualMachine API
-- Attach to running Spring Boot app
-- Real Tomcat method tracing (Http11Processor, MimeHeaders, ByteChunk, etc.)
-- Verified with k6 load test (800 VUs, 100% success)
+### Dynamic Attach
+```bash
+jps -l
+java -cp target/vtracer-1.0.jar com.example.vtracer.AttachTool <PID>
+```
 
-### Day 4 – Virtual Thread Pinning Detection
-- JFR RecordingStream with jdk.VirtualThreadPinned event
-- Pinning detected in synchronized block
-- Warning with thread name and duration
-- Verified in Spring Boot with virtual threads enabled
+Expected output after hitting /slow:
+```
+[vtracer] Agent successfully attached
+[vtracer] ⚠️ PINNING DETECTED! Thread: tomcat-handler-0, Duration: 2005 ns
+```
 
-  Example: <img width="1365" height="649" alt="image" src="https://github.com/user-attachments/assets/8e83f39c-3ae2-4db9-8f6e-9132d7099de2" />
+### JSON Report (on graceful shutdown)
+File: `vtracer-report-2025-12-17T22-35-24.json`
+```json
+[
+  {
+    "type": "method_timing",
+    "name": "public String com.example.springtest.DemoController.slow()",
+    "durationMs": 2005.34,
+    "timestamp": "2025-12-17T22:35:24.227Z"
+  },
+  {
+    "type": "virtual_thread_pinning",
+    "name": "tomcat-handler-0",
+    "durationMs": 2005.66,
+    "timestamp": "2025-12-17T22:35:26.232Z"
+  }
+]
+```
 
+<<<<<<< Updated upstream
 ### Day 5 – Sampling + Pinning Detection
 - 10% sampling implemented (Random decision at method entry)
 - JFR VirtualThreadPinned event captured
@@ -118,9 +139,46 @@ Example:
 Example:
 <img width="1321" height="643" alt="image" src="https://github.com/user-attachments/assets/30b3f141-c0c6-4304-b0ae-7254fdb73534" />
 
+=======
+>>>>>>> Stashed changes
 ---
 
-## ⚡ What This Tool Will NOT Do (Deliberate Omissions)
+## 📋 CLI Reference
+
+| Command                        | Description                          | Example                              |
+|--------------------------------|--------------------------------------|--------------------------------------|
+| `-javaagent:vtracer.jar`       | Static attach at startup            | `java -javaagent:vtracer-1.0.jar -jar app.jar` |
+| `AttachTool <PID>`             | Dynamic attach to running JVM       | `java -cp vtracer.jar AttachTool 12345` |
+
+---
+
+## 📄 JSON Report Schema
+
+```json
+[
+  {
+    "type": "method_timing" | "virtual_thread_pinning",
+    "name": "method signature or thread name",
+    "durationMs": 2005.34,
+    "timestamp": "ISO-8601 timestamp"
+  }
+]
+```
+
+---
+
+## 📊 Benchmarks (k6 Load Test – 800 VUs)
+
+| Scenario                  | Baseline p95 | With vtracer p95 | Overhead |
+|---------------------------|--------------|------------------|----------|
+| /fast endpoint            | 520ms        | 535ms            | ~2.88%   |
+| /slow endpoint (2s sleep) | 2010ms       | 2025ms           | ~0.75%   |
+
+Sampling (10%) keeps overhead minimal.
+
+---
+
+## ⚡ Deliberate Omissions
 
 | Feature                     | Why Not?                                      |
 |-----------------------------|-----------------------------------------------|
@@ -130,20 +188,28 @@ Example:
 | UI dashboard                | CLI-first for production use                  |
 | AI insights                 | We solve real problems, not hype              |
 
-This keeps overhead low and design simple.
+---
+
+## 🔜 Roadmap
+
+- Adaptive sampling
+- Flame graph export
+- Prometheus metrics
+- OpenTelemetry integration
+- GraalVM native image support
 
 ---
 
-## 🔜 Next Steps (Week 2–3)
+**Built by Abhishek Mule**
 
-- Virtual thread pinning detection via JFR
-- Sampling (10% requests)
-- JSON report output
-- Overhead circuit breaker (>2% auto-disable)
-- Final release v0.1.0
+Learning JVM internals, one day at a time.
 
----
+⭐ Star if you're into JVM magic!
 
+<<<<<<< Updated upstream
 **Built by Abhishek Mule**  
 
 Learning JVM internals, one day at a time.```
+=======
+Last updated: v0.1.0 Released (December 2025)
+>>>>>>> Stashed changes

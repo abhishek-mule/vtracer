@@ -1,0 +1,19 @@
+sampling:
+  rate: 0.10
+  enabled: true
+
+instrumentation:
+  include_packages:
+    - "com.example.springtest"
+    - "com.example.vtracer"
+  exclude_packages:
+    - "java."
+    - "sun."
+    - "jdk.internal"
+    - "net.bytebuddy"
+
+pinning_detection:
+  enabled: true
+
+overhead:
+  circuit_breaker_threshold_ms: 1000

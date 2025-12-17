@@ -34,6 +34,12 @@
             <version>2.10.1</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>2.2</version>
+        </dependency>
+
         <!-- JFR is built-in in Java 21+ – no external dependency needed -->
     </dependencies>
 
