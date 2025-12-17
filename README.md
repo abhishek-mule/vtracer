@@ -100,6 +100,12 @@ Watch method timing logs in the Spring Boot console.
 
   Example: <img width="1365" height="649" alt="image" src="https://github.com/user-attachments/assets/8e83f39c-3ae2-4db9-8f6e-9132d7099de2" />
 
+### Day 5 – Sampling + Pinning Detection
+- 10% sampling implemented (Random decision at method entry)
+- JFR VirtualThreadPinned event captured
+- Pinning warning with thread name and duration
+- Verified with synchronized block in Spring Boot app
+
 ---
 
 ## ⚡ What This Tool Will NOT Do (Deliberate Omissions)
@@ -127,7 +133,4 @@ This keeps overhead low and design simple.
 ---
 
 **Built by Abhishek Mule**  
-Learning JVM internals, one day at a time.
-
-Last updated: Day 3 Complete (Dynamic Attach Success)
-```
+Learning JVM internals, one day at a time.```
