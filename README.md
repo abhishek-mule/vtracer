@@ -106,6 +106,8 @@ Watch method timing logs in the Spring Boot console.
 - Pinning warning with thread name and duration
 - Verified with synchronized block in Spring Boot app
 
+Example:
+![img.png](img.png)
 ---
 
 ## ⚡ What This Tool Will NOT Do (Deliberate Omissions)
