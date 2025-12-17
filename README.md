@@ -107,7 +107,8 @@ Watch method timing logs in the Spring Boot console.
 - Verified with synchronized block in Spring Boot app
 
 Example:
-![img_1.png](img_1.png)
+<img width="1318" height="683" alt="image" src="https://github.com/user-attachments/assets/7a8531a9-53da-4253-a96b-204ad10a9b71" />
+
 
 ### Day 6 – JSON Report Generation
 - Structured JSON report on JVM shutdown
@@ -115,7 +116,8 @@ Example:
 - Shutdown hook ensures report is written
 - Verified with graceful shutdown
 Example:
-![img.png](img.png)
+<img width="1321" height="643" alt="image" src="https://github.com/user-attachments/assets/30b3f141-c0c6-4304-b0ae-7254fdb73534" />
+
 ---
 
 ## ⚡ What This Tool Will NOT Do (Deliberate Omissions)
@@ -143,4 +145,5 @@ This keeps overhead low and design simple.
 ---
 
 **Built by Abhishek Mule**  
+
 Learning JVM internals, one day at a time.```
