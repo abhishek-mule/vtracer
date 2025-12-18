@@ -5,7 +5,8 @@
 Zero code change. Attach to any running Java application. Get structured insights into method execution times and virtual thread pinning.
 
 > This is a developer tool for backend engineers, SREs, and platform teams who need to understand request performance at the JVM level.
-
+> 
+[![CI](https://github.com/abhishek-mule/vtracer/actions/workflows/ci.yml/badge.svg)](https://github.com/abhishek-mule/vtracer/actions/workflows/ci.yml)
 ![Java 21](https://img.shields.io/badge/Java-21-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![GitHub release](https://img.shields.io/github/v/release/abhishek-mule/vtracer)

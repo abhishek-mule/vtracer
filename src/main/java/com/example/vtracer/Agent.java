@@ -2,17 +2,22 @@ package com.example.vtracer;
 
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
+import net.bytebuddy.matcher.ElementMatcher;
 import net.bytebuddy.matcher.ElementMatchers;
+import net.bytebuddy.description.type.TypeDescription;
 import java.lang.instrument.Instrumentation;
-import java.util.Random;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import jdk.jfr.consumer.RecordingStream;
 import org.yaml.snakeyaml.Yaml;
+import java.io.FileInputStream;
 import java.io.InputStream;
+import java.lang.StackTraceElement; // Added import
 
 public class Agent {
 
     private static RecordingStream rs;
-    private static VTracerConfig config;
+    public static VTracerConfig config;
 
     public static void premain(String agentArgs, Instrumentation inst) {
         config = loadConfig();
@@ -26,66 +31,37 @@ public class Agent {
 
     private static VTracerConfig loadConfig() {
         Yaml yaml = new Yaml();
-        try (InputStream input = new java.io.FileInputStream("vtracer-config.yml")) {
-            System.out.println("[vtracer] Loaded config from vtracer-config.yml");
+        try (InputStream input = new FileInputStream("vtracer-config.yml")) {
+            System.out.println("[vtracer] Loaded configuration from vtracer-config.yml");
             return yaml.loadAs(input, VTracerConfig.class);
         } catch (Exception e) {
-            System.out.println("[vtracer] External config not found, using defaults: " + e.getMessage());
+            System.out.println("[vtracer] Config file not found or invalid, using defaults");
             return new VTracerConfig();
         }
     }
 
     private static void startInstrumentation(Instrumentation inst) {
-        System.out.printf("[vtracer] Agent loaded – sampling: %.0f%%, pinning detection: %b%n",
-                config.sampling.rate * 100, config.pinningDetection.enabled);
-
-        // JFR pinning detection
-        if (config.pinningDetection.enabled) {
-            rs = new RecordingStream();
-            rs.enable("jdk.VirtualThreadPinned");
-            rs.onEvent("jdk.VirtualThreadPinned", event -> {
-                if (MethodTimer.tracingEnabled) {
-                    long durationNs = event.getDuration().toNanos();
-                    String threadName = event.getThread().getJavaName();
-                    System.out.printf("[vtracer] ⚠️ PINNING DETECTED! Thread: %s, Duration: %d ns%n", threadName, durationNs);
-                    JsonReporter.addPinningEvent(threadName, durationNs);
-                }
-            });
-            rs.startAsync();
+        ElementMatcher.Junction<TypeDescription> typeMatcher = ElementMatchers.none();
+        for (String pkg : config.instrumentation.includePackages) {
+            typeMatcher = typeMatcher.or(ElementMatchers.nameStartsWith(pkg));
+        }
+        for (String pkg : config.instrumentation.excludePackages) {
+            typeMatcher = typeMatcher.and(ElementMatchers.not(ElementMatchers.nameStartsWith(pkg)));
         }
 
-        // Dynamic type matcher from config
-        AgentBuilder.TypeStrategy.Default typeStrategy = new AgentBuilder.Default()
-                .type(buildTypeMatcher());
-
-        typeStrategy
+        new AgentBuilder.Default()
+                .type(typeMatcher)
                 .transform((builder, typeDescription, classLoader, javaModule, protectionDomain) ->
                         builder.visit(Advice.to(MethodTimer.class)
                                 .on(ElementMatchers.isMethod()
                                         .and(ElementMatchers.not(ElementMatchers.isSynthetic())))))
                 .installOn(inst);
-
-        System.out.println("[vtracer] Instrumentation active with selective filtering!");
     }
 
-    private static ElementMatcher.Junction<ClassLoader> buildTypeMatcher() {
-        ElementMatcher.Junction<ClassLoader> matcher = ElementMatchers.none();
-
-        for (String pkg : config.instrumentation.includePackages) {
-            matcher = matcher.or(ElementMatchers.nameStartsWith(pkg));
-        }
-
-        for (String pkg : config.instrumentation.excludePackages) {
-            matcher = matcher.and(ElementMatchers.not(ElementMatchers.nameStartsWith(pkg)));
-        }
-
-        return matcher;
-    }
-
-    // Config classes
+    // --- Configuration Classes ---
     public static class VTracerConfig {
         public Sampling sampling = new Sampling();
-        public Instrumentation instrumentation = new Instrumentation();
+        public InstrumentationConfig instrumentation = new InstrumentationConfig();
         public PinningDetection pinningDetection = new PinningDetection();
         public Overhead overhead = new Overhead();
 
@@ -93,29 +69,35 @@ public class Agent {
             public double rate = 0.10;
             public boolean enabled = true;
         }
-
-        public static class Instrumentation {
+        public static class InstrumentationConfig {
             public List<String> includePackages = List.of("com.example");
             public List<String> excludePackages = List.of("java.", "sun.", "jdk.internal");
         }
-
-        public static class PinningDetection {
-            public boolean enabled = true;
-        }
-
-        public static class Overhead {
-            public double circuitBreakerThresholdMs = 1000.0;
-        }
+        public static class PinningDetection { public boolean enabled = true; }
+        public static class Overhead { public double circuitBreakerThresholdMs = 1000.0; }
     }
 
+    // --- Updated Advice Class ---
     public static class MethodTimer {
         public static volatile boolean tracingEnabled = true;
 
+        // Internal cache to make sampling truly adaptive based on history
+        private static final ConcurrentHashMap<String, Double> history = new ConcurrentHashMap<>();
+
         @Advice.OnMethodEnter
-        public static long enter() {
-            if (!tracingEnabled || !config.sampling.enabled || Math.random() > config.sampling.rate) {
-                return -1;
-            }
+        public static long enter(@Advice.Origin String methodName) {
+            if (!tracingEnabled || !Agent.config.sampling.enabled) return -1;
+
+            // Adaptive sampling logic
+            double durationThresholdMs = 100.0;
+            double slowSamplingRate = 1.0;
+            double fastSamplingRate = 0.01;
+
+            // Use history if available, otherwise use your random estimate logic
+            double lastDuration = history.getOrDefault(methodName, Math.random() * 2000);
+            double currentRate = (lastDuration > durationThresholdMs) ? slowSamplingRate : fastSamplingRate;
+
+            if (Math.random() > currentRate) return -1;
             return System.nanoTime();
         }
 
@@ -126,12 +108,19 @@ public class Agent {
             long durationNs = System.nanoTime() - startTime;
             double durationMs = durationNs / 1_000_000.0;
 
-            System.out.printf("[vtracer] [sampled] Method %s executed in %.2f ms%n", methodName, durationMs);
-            JsonReporter.addMethodTrace(methodName, durationMs);
+            // Update history for adaptive sampling
+            history.put(methodName, durationMs);
 
-            if (durationMs > config.overhead.circuitBreakerThresholdMs) {
+            System.out.printf("[vtracer] [sampled] Method %s executed in %.2f ms%n", methodName, durationMs);
+
+            // Capture stack trace for flame graph
+            StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+            JsonReporter.addMethodTrace(methodName, durationMs, stackTrace);
+
+            // Circuit Breaker Check
+            if (durationMs > Agent.config.overhead.circuitBreakerThresholdMs) {
                 tracingEnabled = false;
-                System.out.println("[vtracer] 🛑 CIRCUIT BREAKER OPENED – high latency detected");
+                System.out.println("[vtracer] 🛑 CIRCUIT BREAKER OPENED – tracing disabled");
             }
         }
     }

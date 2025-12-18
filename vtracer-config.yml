@@ -1,11 +1,10 @@
 sampling:
-  rate: 0.50
+  rate: 0.50   # 50% sampling – zyada logs aayenge
   enabled: true
 
 instrumentation:
   include_packages:
     - "com.example.springtest"
-    - "com.example.vtracer"
   exclude_packages:
     - "java."
     - "sun."

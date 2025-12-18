@@ -1,6 +1,7 @@
 package com.example.vtracer;
 
 import com.sun.tools.attach.VirtualMachine;
+import java.io.File;
 
 public class AttachTool {
     public static void main(String[] args) throws Exception {
@@ -10,9 +11,10 @@ public class AttachTool {
         }
 
         String pid = args[0];
-        String agentJar = "C:\\Users\\HP\\Desktop\\My java projects\\vtracer\\target\\vtracer-1.0.jar";  // tera exact path daal (double backslash)
+        String agentJar = new File("target/vtracer-1.0.jar").getAbsolutePath();  // shaded JAR ka absolute path
 
         System.out.println("[vtracer] Attaching to PID: " + pid);
+        System.out.println("[vtracer] Using agent JAR: " + agentJar);
 
         VirtualMachine vm = VirtualMachine.attach(pid);
         vm.loadAgent(agentJar);
