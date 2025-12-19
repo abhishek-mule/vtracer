@@ -3,322 +3,744 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VTracer - Interactive Flame Graph</title>
+    <title>vtracer - Interactive Flame Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%); color: #e0e0e0; min-height: 100vh; padding: 20px; }
-        .container { max-width: 1600px; margin: 0 auto; }
-        header { text-align: center; margin-bottom: 30px; }
-        h1 { font-size: 2.5em; background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffd700 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 10px; }
-        .subtitle { color: #a0a0b0; font-size: 1.1em; }
-        .controls { background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .control-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: 600; color: #b0b0c0; }
-        input[type="file"] { display: none; }
-        .file-upload-btn { display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; }
-        .file-upload-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
-        .timeline-container { display: none; margin-top: 15px; }
-        .timeline { position: relative; height: 60px; background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 10px; cursor: pointer; }
-        .timeline-track { position: absolute; top: 50%; left: 10px; right: 10px; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; transform: translateY(-50%); }
-        .timeline-marker { position: absolute; top: 50%; width: 20px; height: 20px; background: #667eea; border-radius: 50%; transform: translate(-50%, -50%); cursor: grab; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5); z-index: 10; }
-        .timeline-marker:active { cursor: grabbing; }
-        .timeline-label { position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-size: 0.85em; color: #a0a0b0; }
-        .flame-graph-container { background: rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid rgba(255, 255, 255, 0.1); overflow-x: auto; }
-        #flameGraph { min-height: 400px; }
-        .flame-rect { stroke: rgba(0, 0, 0, 0.3); stroke-width: 1; cursor: pointer; transition: opacity 0.2s; }
-        .flame-rect:hover { opacity: 0.8; stroke: white; stroke-width: 2; }
-        .flame-text { font-size: 12px; fill: white; pointer-events: none; text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); }
-        .legend { display: flex; justify-content: center; gap: 30px; margin-bottom: 20px; flex-wrap: wrap; }
-        .legend-item { display: flex; align-items: center; gap: 8px; }
-        .legend-color { width: 30px; height: 20px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.2); }
-        .tooltip { position: fixed; background: rgba(0, 0, 0, 0.95); color: white; padding: 15px; border-radius: 8px; pointer-events: none; z-index: 1000; max-width: 400px; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5); display: none; }
-        .tooltip-title { font-weight: 700; margin-bottom: 8px; font-size: 1.1em; color: #ffd700; }
-        .tooltip-detail { margin: 5px 0; font-size: 0.95em; }
-        .tooltip-label { color: #a0a0b0; font-weight: 600; }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
-        .stat-card { background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 15px; border: 1px solid rgba(255, 255, 255, 0.1); }
-        .stat-value { font-size: 2em; font-weight: 700; margin-bottom: 5px; }
-        .stat-label { color: #a0a0b0; font-size: 0.9em; }
-        .export-btn { padding: 10px 20px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; margin-right: 10px; }
-        .export-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4); }
-        .search-box { width: 100%; padding: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; color: white; font-size: 1em; }
-        .search-box::placeholder { color: #6a6a7a; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            overflow-x: hidden;
+        }
+
+        .header {
+            background: rgba(20, 20, 30, 0.95);
+            backdrop-filter: blur(20px);
+            padding: 20px 40px;
+            border-bottom: 1px solid rgba(100, 100, 255, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+        }
+
+        .header .subtitle {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 80px);
+        }
+
+        .sidebar {
+            width: 320px;
+            background: rgba(20, 20, 30, 0.95);
+            backdrop-filter: blur(20px);
+            padding: 24px;
+            overflow-y: auto;
+            border-right: 1px solid rgba(100, 100, 255, 0.2);
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 24px;
+            overflow: hidden;
+        }
+
+        .control-group {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-group:last-child {
+            border-bottom: none;
+        }
+
+        .control-group h3 {
+            color: #667eea;
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 16px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            background: rgba(40, 40, 60, 0.6);
+            border: 1px solid rgba(100, 100, 255, 0.3);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, #434343 0%, #000000 100%);
+        }
+
+        .stats {
+            margin-top: 16px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .stat-value {
+            color: #4CAF50;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+
+        .color-scheme {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .color-option {
+            padding: 10px;
+            background: rgba(40, 40, 60, 0.6);
+            border: 2px solid transparent;
+            border-radius: 6px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .color-option:hover {
+            border-color: #667eea;
+        }
+
+        .color-option.active {
+            border-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.2);
+        }
+
+        #flamegraph {
+            width: 100%;
+            height: 100%;
+            background: rgba(20, 20, 30, 0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .frame {
+            cursor: pointer;
+            stroke: rgba(0, 0, 0, 0.4);
+            stroke-width: 0.5;
+            transition: all 0.15s ease;
+        }
+
+        .frame:hover {
+            stroke: #fff;
+            stroke-width: 2;
+            filter: brightness(1.3);
+        }
+
+        .frame.dimmed {
+            opacity: 0.2;
+        }
+
+        .frame-text {
+            font-size: 11px;
+            font-weight: 500;
+            fill: rgba(0, 0, 0, 0.9);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        #tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.95);
+            color: #fff;
+            padding: 16px 20px;
+            border-radius: 10px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            font-size: 13px;
+            border: 1px solid rgba(102, 126, 234, 0.5);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+            z-index: 10000;
+            max-width: 450px;
+            line-height: 1.6;
+        }
+
+        #tooltip.visible {
+            opacity: 1;
+        }
+
+        .tooltip-header {
+            font-weight: 700;
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #667eea;
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+        }
+
+        .tooltip-label {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .tooltip-value {
+            font-weight: 600;
+            color: #4CAF50;
+            font-family: 'Courier New', monospace;
+        }
+
+        #breadcrumb {
+            background: rgba(40, 40, 60, 0.6);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .breadcrumb-item {
+            display: inline-block;
+            margin: 0 4px;
+        }
+
+        .breadcrumb-separator {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(102, 126, 234, 0.8);
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <header>
-        <h1>🔥 VTracer Flame Graph</h1>
-        <p class="subtitle">Interactive Virtual Thread Pinning Analyzer</p>
-    </header>
-    <div class="controls">
-        <div class="control-group">
-            <label for="fileInput">Load JSON Report File</label>
-            <label for="fileInput" class="file-upload-btn">
-                📁 Choose File
-            </label>
-            <input type="file" id="fileInput" accept=".json">
-            <span id="fileName" style="margin-left: 15px; color: #a0a0b0;"></span>
+    <div class="header">
+        <h1>🔥 vtracer Flame Graph</h1>
+        <div class="subtitle">Interactive JVM Performance Profiling</div>
+    </div>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="control-group">
+                <h3>🔍 Search</h3>
+                <input type="text" id="search" placeholder="Search methods...">
+            </div>
+
+            <div class="control-group">
+                <h3>🎨 Color Scheme</h3>
+                <div class="color-scheme">
+                    <div class="color-option active" data-scheme="java">Java</div>
+                    <div class="color-option" data-scheme="hot">Hot</div>
+                    <div class="color-option" data-scheme="cool">Cool</div>
+                    <div class="color-option" data-scheme="rainbow">Rainbow</div>
+                    <div class="color-option" data-scheme="mono">Mono</div>
+                    <div class="color-option" data-scheme="perf">Perf</div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>⚙️ Controls</h3>
+                <div class="button-group">
+                    <button onclick="resetZoom()">Reset</button>
+                    <button onclick="exportSVG()" class="secondary">Export</button>
+                    <button onclick="toggleLabels()">Labels</button>
+                    <button onclick="shareView()" class="secondary">Share</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>📊 Statistics</h3>
+                <div class="stats" id="stats"></div>
+            </div>
+
+            <div class="control-group">
+                <h3>🔥 Hot Methods</h3>
+                <div id="hotMethods" style="font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
+            </div>
         </div>
-        <div class="control-group">
-            <label for="searchBox">Search Stack Frames</label>
-            <input type="text" id="searchBox" class="search-box" placeholder="Type to search methods...">
-        </div>
-        <div class="control-group" style="margin-top: 15px;">
-            <button class="export-btn" id="exportSvg">📊 Export SVG</button>
-            <button class="export-btn" id="exportHtml">🌐 Export HTML</button>
+
+        <div class="main-content">
+            <div id="breadcrumb">Root</div>
+            <div id="flamegraph"></div>
         </div>
     </div>
-    <div class="legend">
-        <div class="legend-item">
-            <div class="legend-color" style="background: linear-gradient(135deg, #ff0000 0%, #ff6b00 100%);"></div>
-            <span>Pinned (synchronized)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: linear-gradient(135deg, #ff8800 0%, #ffaa00 100%);"></div>
-            <span>Pinned (native)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);"></div>
-            <span>Non-blocking</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);"></div>
-            <span>Fast execution</span>
-        </div>
-    </div>
-    <div class="flame-graph-container">
-        <svg id="flameGraph" width="100%" height="500"></svg>
-    </div>
-    <div class="stats" id="stats"></div>
-</div>
-<div class="tooltip" id="tooltip"></div>
-<script>
-    class FlameGraph {
-        constructor() {
-            this.svg = document.getElementById('flameGraph');
-            this.tooltip = document.getElementById('tooltip');
-            this.allFrames = [];
-            this.currentFrameIndex = 0;
-            this.searchTerm = '';
-            this.width = 1400;
-            this.height = 500;
-            this.charWidth = 7;
-            this.initEventListeners();
-        }
-        initEventListeners() {
-            document.getElementById('fileInput').addEventListener('change', (e) => this.loadFile(e));
-            document.getElementById('searchBox').addEventListener('input', (e) => this.handleSearch(e));
-            document.getElementById('exportSvg').addEventListener('click', () => this.exportSVG());
-            document.getElementById('exportHtml').addEventListener('click', () => this.exportHTML());
-        }
-        async loadFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            document.getElementById('fileName').textContent = file.name;
-            const text = await file.text();
-            this.parseData(text);
-        }
-        parseData(text) {
-            try {
-                const data = JSON.parse(text);
-                this.allFrames = [];
 
-                data.forEach(entry => {
-                    if (entry.type === "method_timing" && entry.stackTrace) {
-                        const stack = entry.stackTrace.slice().reverse(); // bottom to top
-                        const duration = Math.round(entry.durationMs * 1000); // microseconds
-                        this.allFrames.push({ stack, duration });
-                    }
-                });
+    <div id="tooltip"></div>
 
-                if (this.allFrames.length > 0) {
-                    this.currentFrameIndex = 0;
-                    this.renderFlameGraph();
-                    this.updateStats();
-                } else {
-                    alert("No method timing data with stack trace found in JSON");
-                }
-            } catch (e) {
-                alert("Invalid JSON format");
-            }
-        }
-        isPinningFrame(frameName) {
-            const pinningPatterns = [
-                'synchronized', 'Object.wait', 'Thread.sleep', 'Native', '.lock(', 'ReentrantLock', 'Semaphore', 'CountDownLatch'
-            ];
-            return pinningPatterns.some(p => frameName.includes(p));
-        }
-        getPinningType(frameName) {
-            if (frameName.includes('synchronized') || frameName.includes('.lock(') || frameName.includes('ReentrantLock')) {
-                return 'synchronized';
-            }
-            if (frameName.includes('Native') || frameName.includes('JNI')) {
-                return 'native';
-            }
-            return 'blocking';
-        }
-        getColor(frameName, duration) {
-            if (this.isPinningFrame(frameName)) {
-                const type = this.getPinningType(frameName);
-                if (type === 'synchronized') return '#ff4444';
-                if (type === 'native') return '#ff9933';
-                return '#ffaa44';
-            }
-            if (duration < 1000) return '#43e97b';
-            return '#4facfe';
-        }
-        renderFlameGraph() {
-            this.svg.innerHTML = '';
-            const margin = { top: 20, right: 20, bottom: 20, left: 20 };
-            const width = this.width - margin.left - margin.right;
-            const height = this.height - margin.top - margin.bottom;
+    <script>
+        // Configuration
+        const config = {
+            width: 0,
+            height: 0,
+            frameHeight: 18,
+            paddingX: 2,
+            paddingY: 1,
+            minFrameWidth: 0.5,
+            transitionDuration: 600
+        };
 
-            const root = { name: 'root', value: 0, children: [] };
-            this.allFrames.forEach(frame => {
-                let current = root;
-                frame.stack.forEach(name => {
-                    let child = current.children.find(c => c.name === name);
-                    if (!child) {
-                        child = { name, value: 0, children: [] };
-                        current.children.push(child);
-                    }
-                    child.value += frame.duration;
-                    current = child;
+        const colorSchemes = {
+            java: (d) => {
+                const name = d.data.name.toLowerCase();
+                if (name.includes('java.') || name.includes('javax.')) return '#3498db';
+                if (name.includes('org.springframework') || name.includes('org.apache')) return '#e67e22';
+                if (name.includes('com.example')) return '#e74c3c';
+                return '#95a5a6';
+            },
+            hot: d3.scaleSequential(d3.interpolateYlOrRd).domain([0, 1]),
+            cool: d3.scaleSequential(d3.interpolateCool).domain([0, 1]),
+            rainbow: d3.scaleSequential(d3.interpolateRainbow).domain([0, 1]),
+            mono: d3.scaleSequential(d3.interpolateGreys).domain([0.3, 0.9]),
+            perf: d3.scaleSequential(d3.interpolatePlasma).domain([0, 1])
+        };
+
+        let currentScheme = 'java';
+        let data, svg, root, currentRoot, partition;
+        let showLabels = true;
+
+        // Initialize
+        window.addEventListener('load', init);
+
+        function init() {
+            const container = document.getElementById('flamegraph');
+            config.width = container.clientWidth;
+            config.height = container.clientHeight - 50;
+
+            // Generate sample data if no data file exists
+            loadData();
+
+            // Event listeners
+            document.getElementById('search').addEventListener('input', handleSearch);
+            document.querySelectorAll('.color-option').forEach(opt => {
+                opt.addEventListener('click', (e) => {
+                    document.querySelectorAll('.color-option').forEach(o => o.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentScheme = e.target.dataset.scheme;
+                    render(currentRoot);
                 });
             });
 
-            const total = root.children.reduce((sum, c) => sum + c.value, 0);
-            const barHeight = 20;
+            window.addEventListener('resize', debounce(() => {
+                config.width = container.clientWidth;
+                config.height = container.clientHeight - 50;
+                render(currentRoot);
+            }, 250));
+        }
 
-            const renderLevel = (nodes, x, availableWidth, depth) => {
-                if (depth > 30) return;
-                let currentX = x;
-                nodes.forEach(node => {
-                    const nodeWidth = (node.value / total) * availableWidth;
-                    if (nodeWidth < 1) return;
-
-                    const matchesSearch = !this.searchTerm || node.name.toLowerCase().includes(this.searchTerm.toLowerCase());
-
-                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                    rect.setAttribute('x', currentX);
-                    rect.setAttribute('y', depth * barHeight + margin.top);
-                    rect.setAttribute('width', nodeWidth);
-                    rect.setAttribute('height', barHeight - 1);
-                    rect.setAttribute('class', 'flame-rect');
-                    rect.setAttribute('fill', this.getColor(node.name, node.value));
-                    rect.setAttribute('opacity', matchesSearch ? '1' : '0.3');
-
-                    rect.addEventListener('mouseenter', (e) => this.showTooltip(e, node));
-                    rect.addEventListener('mouseleave', () => this.hideTooltip());
-
-                    this.svg.appendChild(rect);
-
-                    if (nodeWidth > 50) {
-                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        text.setAttribute('x', currentX + 5);
-                        text.setAttribute('y', depth * barHeight + margin.top + 14);
-                        text.setAttribute('class', 'flame-text');
-                        text.textContent = this.truncateText(node.name, nodeWidth);
-                        this.svg.appendChild(text);
-                    }
-
-                    if (node.children.length > 0) {
-                        renderLevel(node.children, currentX, nodeWidth, depth + 1);
-                    }
-
-                    currentX += nodeWidth;
+        function loadData() {
+            // Try to load from external file first
+            fetch('flamegraph-data.json')
+                .then(r => r.json())
+                .then(jsonData => {
+                    processData(jsonData.flamegraph || jsonData);
+                })
+                .catch(() => {
+                    // Generate sample data for demo
+                    const sampleData = generateSampleData();
+                    processData(sampleData);
                 });
+        }
+
+        function generateSampleData() {
+            return {
+                name: "root",
+                value: 1000000,
+                children: [
+                    {
+                        name: "java.lang.Thread.run",
+                        value: 1000000,
+                        children: [
+                            {
+                                name: "org.springframework.web.DispatcherServlet.doService",
+                                value: 850000,
+                                children: [
+                                    {
+                                        name: "com.example.controller.UserController.getUsers",
+                                        value: 650000,
+                                        children: [
+                                            { name: "com.example.service.UserService.findAll", value: 500000 },
+                                            { name: "com.example.mapper.UserMapper.toDto", value: 150000 }
+                                        ]
+                                    },
+                                    { name: "org.springframework.web.method.HandlerMethod.invoke", value: 200000 }
+                                ]
+                            },
+                            { name: "org.apache.tomcat.util.threads.TaskThread.run", value: 150000 }
+                        ]
+                    }
+                ]
             };
-            renderLevel(root.children, margin.left, width, 0);
         }
-        truncateText(text, width) {
-            const maxChars = Math.floor(width / this.charWidth) - 2;
-            if (text.length <= maxChars) return text;
-            return text.substring(0, maxChars) + '..';
-        }
-        showTooltip(event, node) {
-            const isPinned = this.isPinningFrame(node.name);
-            let html = `<div class="tooltip-title">${node.name}</div>`;
-            html += `<div class="tooltip-detail"><span class="tooltip-label">Duration:</span> ${(node.value / 1000).toFixed(2)} ms</div>`;
-            if (isPinned) {
-                html += `<div class="tooltip-detail"><span class="tooltip-label">⚠️ Status:</span> <span style="color: #ff4444;">PINNED</span></div>`;
-            }
-            this.tooltip.innerHTML = html;
-            this.tooltip.style.display = 'block';
-            this.tooltip.style.left = (event.pageX + 15) + 'px';
-            this.tooltip.style.top = (event.pageY + 15) + 'px';
-        }
-        hideTooltip() {
-            this.tooltip.style.display = 'none';
-        }
-        handleSearch(event) {
-            this.searchTerm = event.target.value;
-            this.renderFlameGraph();
-        }
-        exportSVG() {
-            const svgData = this.svg.outerHTML;
-            const blob = new Blob([svgData], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'vtracer-flamegraph.svg';
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-        exportHTML() {
-            const htmlContent = document.documentElement.outerHTML;
-            const blob = new Blob([htmlContent], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'vtracer-flamegraph.html';
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-        updateStats() {
-            const statsDiv = document.getElementById('stats');
-            let totalPinned = 0;
-            let totalDuration = 0;
-            let pinnedDuration = 0;
 
-            this.allFrames.forEach(frame => {
-                totalDuration += frame.duration;
-                const hasPinning = frame.stack.some(f => this.isPinningFrame(f));
-                if (hasPinning) {
-                    totalPinned++;
-                    pinnedDuration += frame.duration;
+        function processData(jsonData) {
+            data = jsonData;
+            root = d3.hierarchy(data)
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+
+            currentRoot = root;
+
+            partition = d3.partition()
+                .size([config.width, config.height])
+                .padding(config.paddingY);
+
+            partition(root);
+
+            svg = d3.select('#flamegraph')
+                .append('svg')
+                .attr('width', config.width)
+                .attr('height', config.height);
+
+            render(root);
+            updateStats(root);
+            updateHotMethods(root);
+        }
+
+        function render(node) {
+            const descendants = node.descendants();
+
+            // Update breadcrumb
+            updateBreadcrumb(node);
+
+            // Bind data
+            const cells = svg.selectAll('g')
+                .data(descendants, d => d.data.name + d.depth);
+
+            // Exit
+            cells.exit().remove();
+
+            // Enter + Update
+            const cellsEnter = cells.enter()
+                .append('g')
+                .attr('class', 'cell');
+
+            cellsEnter.append('rect')
+                .attr('class', 'frame');
+
+            cellsEnter.append('text')
+                .attr('class', 'frame-text');
+
+            const allCells = cellsEnter.merge(cells);
+
+            allCells.transition()
+                .duration(config.transitionDuration)
+                .attr('transform', d => `translate(${d.x0},${d.y0})`);
+
+            allCells.select('rect')
+                .attr('width', d => Math.max(0, d.x1 - d.x0 - config.paddingX))
+                .attr('height', config.frameHeight)
+                .attr('fill', d => getColor(d))
+                .on('click', (event, d) => zoom(d))
+                .on('mouseenter', showTooltip)
+                .on('mouseleave', hideTooltip);
+
+            allCells.select('text')
+                .attr('x', 4)
+                .attr('y', config.frameHeight / 2)
+                .attr('dy', '0.35em')
+                .style('display', showLabels ? 'block' : 'none')
+                .text(d => getLabel(d, d.x1 - d.x0));
+
+            updateStats(node);
+        }
+
+        function getColor(d) {
+            if (typeof colorSchemes[currentScheme] === 'function') {
+                if (currentScheme === 'java') {
+                    return colorSchemes[currentScheme](d);
                 }
-            });
+                const t = d.depth / root.height;
+                return colorSchemes[currentScheme](t);
+            }
+            return '#666';
+        }
 
-            const pinningPercentage = ((totalPinned / this.allFrames.length) * 100).toFixed(1);
-            const durationPercentage = ((pinnedDuration / totalDuration) * 100).toFixed(1);
+        function getLabel(d, width) {
+            if (width < 30) return '';
+            const name = d.data.name;
+            const maxChars = Math.floor(width / 7);
+            return name.length > maxChars ? name.substring(0, maxChars - 3) + '...' : name;
+        }
 
-            statsDiv.innerHTML = `
-                <div class="stat-card">
-                    <div class="stat-value">${this.allFrames.length}</div>
-                    <div class="stat-label">Total Traces</div>
+        function zoom(d) {
+            if (d === currentRoot) return;
+
+            currentRoot = d;
+
+            const scale = config.width / (d.x1 - d.x0);
+            const translateX = -d.x0 * scale;
+
+            svg.selectAll('g')
+                .transition()
+                .duration(config.transitionDuration)
+                .attr('transform', n => {
+                    const x = (n.x0 - d.x0) * scale;
+                    const y = n.y0 - d.y0;
+                    return `translate(${x},${y})`;
+                })
+                .select('rect')
+                .attr('width', n => Math.max(0, (n.x1 - n.x0) * scale - config.paddingX));
+
+            updateBreadcrumb(d);
+            updateStats(d);
+        }
+
+        function resetZoom() {
+            zoom(root);
+        }
+
+        function showTooltip(event, d) {
+            const tooltip = document.getElementById('tooltip');
+            const percent = (100 * d.value / root.value).toFixed(2);
+            const selfPercent = d.children 
+                ? (100 * (d.value - d.children.reduce((sum, c) => sum + c.value, 0)) / root.value).toFixed(2)
+                : percent;
+
+            tooltip.innerHTML = `
+                <div class="tooltip-header">${d.data.name}</div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Total Time:</span>
+                    <span class="tooltip-value">${formatTime(d.value)}</span>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" style="color: #ff4444;">${totalPinned}</div>
-                    <div class="stat-label">Pinning Events</div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Percentage:</span>
+                    <span class="tooltip-value">${percent}%</span>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value">${pinningPercentage}%</div>
-                    <div class="stat-label">Pinning Frequency</div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Self Time:</span>
+                    <span class="tooltip-value">${selfPercent}%</span>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value">${durationPercentage}%</div>
-                    <div class="stat-label">Time Spent Pinned</div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">Depth:</span>
+                    <span class="tooltip-value">${d.depth}</span>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value">${(totalDuration / 1000000).toFixed(2)} s</div>
-                    <div class="stat-label">Total Duration</div>
+            `;
+
+            tooltip.classList.add('visible');
+            positionTooltip(event);
+        }
+
+        function positionTooltip(event) {
+            const tooltip = document.getElementById('tooltip');
+            const x = event.pageX + 15;
+            const y = event.pageY + 15;
+            
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = y + 'px';
+        }
+
+        function hideTooltip() {
+            document.getElementById('tooltip').classList.remove('visible');
+        }
+
+        function updateBreadcrumb(node) {
+            const path = [];
+            let current = node;
+            while (current) {
+                path.unshift(current);
+                current = current.parent;
+            }
+
+            const breadcrumb = document.getElementById('breadcrumb');
+            breadcrumb.innerHTML = path
+                .map((n, i) => `
+                    <span class="breadcrumb-item" onclick="zoom(root${path.slice(1, i + 1).map((_, j) => `.children[${j}]`).join('')})" style="cursor: pointer;">
+                        ${n.data.name}
+                    </span>
+                    ${i < path.length - 1 ? '<span class="breadcrumb-separator">›</span>' : ''}
+                `)
+                .join('');
+        }
+
+        function updateStats(node) {
+            const stats = document.getElementById('stats');
+            const descendants = node.descendants();
+            
+            stats.innerHTML = `
+                <div class="stat-item">
+                    <span>Total Time</span>
+                    <span class="stat-value">${formatTime(node.value)}</span>
+                </div>
+                <div class="stat-item">
+                    <span>Max Depth</span>
+                    <span class="stat-value">${node.height}</span>
+                </div>
+                <div class="stat-item">
+                    <span>Total Frames</span>
+                    <span class="stat-value">${descendants.length}</span>
+                </div>
+                <div class="stat-item">
+                    <span>Visible Frames</span>
+                    <span class="stat-value">${descendants.filter(d => (d.x1 - d.x0) > config.minFrameWidth).length}</span>
                 </div>
             `;
         }
-    }
-    const flameGraph = new FlameGraph();
-</script>
+
+        function updateHotMethods(node) {
+            const hot = node.descendants()
+                .filter(d => !d.children || d.children.length === 0)
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 10);
+
+            const hotMethods = document.getElementById('hotMethods');
+            hotMethods.innerHTML = hot.map((d, i) => `
+                <div style="padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer;" onclick="zoom(root${getPathToNode(d)})">
+                    <div style="color: #4CAF50; font-weight: 600;">${i + 1}. ${d.data.name}</div>
+                    <div style="color: rgba(255,255,255,0.5); font-size: 11px;">${formatTime(d.value)} (${(100 * d.value / root.value).toFixed(1)}%)</div>
+                </div>
+            `).join('');
+        }
+
+        function getPathToNode(node) {
+            const path = [];
+            let current = node;
+            while (current.parent) {
+                const index = current.parent.children.indexOf(current);
+                path.unshift(`.children[${index}]`);
+                current = current.parent;
+            }
+            return path.join('');
+        }
+
+        function handleSearch(e) {
+            const query = e.target.value.toLowerCase();
+            
+            svg.selectAll('.frame')
+                .classed('dimmed', d => {
+                    if (!query) return false;
+                    return !d.data.name.toLowerCase().includes(query);
+                });
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            svg.selectAll('.frame-text')
+                .style('display', showLabels ? 'block' : 'none');
+        }
+
+        function exportSVG() {
+            const svgData = new XMLSerializer().serializeToString(svg.node());
+            const blob = new Blob([svgData], {type: 'image/svg+xml'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'flamegraph.svg';
+            link.click();
+        }
+
+        function shareView() {
+            const url = new URL(window.location);
+            url.searchParams.set('node', currentRoot.data.name);
+            navigator.clipboard.writeText(url.toString());
+            alert('View link copied to clipboard!');
+        }
+
+        function formatTime(ns) {
+            if (ns < 1000) return ns + ' ns';
+            if (ns < 1000000) return (ns / 1000).toFixed(2) + ' μs';
+            if (ns < 1000000000) return (ns / 1000000).toFixed(2) + ' ms';
+            return (ns / 1000000000).toFixed(2) + ' s';
+        }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+    </script>
 </body>
 </html>
