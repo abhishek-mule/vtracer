@@ -5,290 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VTracer - Interactive Flame Graph</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
-            color: #e0e0e0;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        h1 {
-            font-size: 2.5em;
-            background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffd700 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 10px;
-        }
-
-        .subtitle {
-            color: #a0a0b0;
-            font-size: 1.1em;
-        }
-
-        .controls {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .control-group {
-            margin-bottom: 15px;
-        }
-
-        .control-group:last-child {
-            margin-bottom: 0;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #b0b0c0;
-        }
-
-        input[type="file"] {
-            display: none;
-        }
-
-        .file-upload-btn {
-            display: inline-block;
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .file-upload-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .timeline-container {
-            display: none;
-            margin-top: 15px;
-        }
-
-        .timeline {
-            position: relative;
-            height: 60px;
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
-            padding: 10px;
-            cursor: pointer;
-        }
-
-        .timeline-track {
-            position: absolute;
-            top: 50%;
-            left: 10px;
-            right: 10px;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-            transform: translateY(-50%);
-        }
-
-        .timeline-marker {
-            position: absolute;
-            top: 50%;
-            width: 20px;
-            height: 20px;
-            background: #667eea;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            cursor: grab;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
-            z-index: 10;
-        }
-
-        .timeline-marker:active {
-            cursor: grabbing;
-        }
-
-        .timeline-label {
-            position: absolute;
-            top: 5px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 0.85em;
-            color: #a0a0b0;
-        }
-
-        .flame-graph-container {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            overflow-x: auto;
-        }
-
-        #flameGraph {
-            min-height: 400px;
-        }
-
-        .flame-rect {
-            stroke: rgba(0, 0, 0, 0.3);
-            stroke-width: 1;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-
-        .flame-rect:hover {
-            opacity: 0.8;
-            stroke: white;
-            stroke-width: 2;
-        }
-
-        .flame-text {
-            font-size: 12px;
-            fill: white;
-            pointer-events: none;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-        }
-
-        .legend {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .legend-color {
-            width: 30px;
-            height: 20px;
-            border-radius: 4px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .tooltip {
-            position: fixed;
-            background: rgba(0, 0, 0, 0.95);
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            pointer-events: none;
-            z-index: 1000;
-            max-width: 400px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
-            display: none;
-        }
-
-        .tooltip-title {
-            font-weight: 700;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-            color: #ffd700;
-        }
-
-        .tooltip-detail {
-            margin: 5px 0;
-            font-size: 0.95em;
-        }
-
-        .tooltip-label {
-            color: #a0a0b0;
-            font-weight: 600;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .stat-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            padding: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .stat-value {
-            font-size: 2em;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-
-        .stat-label {
-            color: #a0a0b0;
-            font-size: 0.9em;
-        }
-
-        .export-btn {
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
-            margin-right: 10px;
-        }
-
-        .export-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
-        }
-
-        .search-box {
-            width: 100%;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            color: white;
-            font-size: 1em;
-        }
-
-        .search-box::placeholder {
-            color: #6a6a7a;
-        }
-
-        .pinning-indicator {
-            display: inline-block;
-            padding: 4px 8px;
-            background: #ff4444;
-            color: white;
-            border-radius: 4px;
-            font-size: 0.85em;
-            font-weight: 700;
-            margin-left: 8px;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%); color: #e0e0e0; min-height: 100vh; padding: 20px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 30px; }
+        h1 { font-size: 2.5em; background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffd700 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 10px; }
+        .subtitle { color: #a0a0b0; font-size: 1.1em; }
+        .controls { background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 20px; margin-bottom: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .control-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #b0b0c0; }
+        input[type="file"] { display: none; }
+        .file-upload-btn { display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 8px; cursor: pointer; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; }
+        .file-upload-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+        .timeline-container { display: none; margin-top: 15px; }
+        .timeline { position: relative; height: 60px; background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 10px; cursor: pointer; }
+        .timeline-track { position: absolute; top: 50%; left: 10px; right: 10px; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 3px; transform: translateY(-50%); }
+        .timeline-marker { position: absolute; top: 50%; width: 20px; height: 20px; background: #667eea; border-radius: 50%; transform: translate(-50%, -50%); cursor: grab; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5); z-index: 10; }
+        .timeline-marker:active { cursor: grabbing; }
+        .timeline-label { position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-size: 0.85em; color: #a0a0b0; }
+        .flame-graph-container { background: rgba(255, 255, 255, 0.03); border-radius: 12px; padding: 20px; margin-bottom: 20px; border: 1px solid rgba(255, 255, 255, 0.1); overflow-x: auto; }
+        #flameGraph { min-height: 400px; }
+        .flame-rect { stroke: rgba(0, 0, 0, 0.3); stroke-width: 1; cursor: pointer; transition: opacity 0.2s; }
+        .flame-rect:hover { opacity: 0.8; stroke: white; stroke-width: 2; }
+        .flame-text { font-size: 12px; fill: white; pointer-events: none; text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); }
+        .legend { display: flex; justify-content: center; gap: 30px; margin-bottom: 20px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .legend-color { width: 30px; height: 20px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.2); }
+        .tooltip { position: fixed; background: rgba(0, 0, 0, 0.95); color: white; padding: 15px; border-radius: 8px; pointer-events: none; z-index: 1000; max-width: 400px; border: 1px solid rgba(255, 255, 255, 0.2); box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5); display: none; }
+        .tooltip-title { font-weight: 700; margin-bottom: 8px; font-size: 1.1em; color: #ffd700; }
+        .tooltip-detail { margin: 5px 0; font-size: 0.95em; }
+        .tooltip-label { color: #a0a0b0; font-weight: 600; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px; }
+        .stat-card { background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 15px; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .stat-value { font-size: 2em; font-weight: 700; margin-bottom: 5px; }
+        .stat-label { color: #a0a0b0; font-size: 0.9em; }
+        .export-btn { padding: 10px 20px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: transform 0.2s, box-shadow 0.2s; margin-right: 10px; }
+        .export-btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4); }
+        .search-box { width: 100%; padding: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; color: white; font-size: 1em; }
+        .search-box::placeholder { color: #6a6a7a; }
     </style>
 </head>
 <body>
@@ -297,37 +51,24 @@
         <h1>🔥 VTracer Flame Graph</h1>
         <p class="subtitle">Interactive Virtual Thread Pinning Analyzer</p>
     </header>
-
     <div class="controls">
         <div class="control-group">
-            <label for="fileInput">Load Folded Stack File</label>
+            <label for="fileInput">Load JSON Report File</label>
             <label for="fileInput" class="file-upload-btn">
                 📁 Choose File
             </label>
-            <input type="file" id="fileInput" accept=".txt,.folded">
+            <input type="file" id="fileInput" accept=".json">
             <span id="fileName" style="margin-left: 15px; color: #a0a0b0;"></span>
         </div>
-
         <div class="control-group">
             <label for="searchBox">Search Stack Frames</label>
             <input type="text" id="searchBox" class="search-box" placeholder="Type to search methods...">
         </div>
-
-        <div class="timeline-container" id="timelineContainer">
-            <label>Time Travel Mode</label>
-            <div class="timeline" id="timeline">
-                <div class="timeline-label" id="timelineLabel">Frame 1 / 1</div>
-                <div class="timeline-track"></div>
-                <div class="timeline-marker" id="timelineMarker"></div>
-            </div>
-        </div>
-
         <div class="control-group" style="margin-top: 15px;">
             <button class="export-btn" id="exportSvg">📊 Export SVG</button>
             <button class="export-btn" id="exportHtml">🌐 Export HTML</button>
         </div>
     </div>
-
     <div class="legend">
         <div class="legend-item">
             <div class="legend-color" style="background: linear-gradient(135deg, #ff0000 0%, #ff6b00 100%);"></div>
@@ -346,16 +87,12 @@
             <span>Fast execution</span>
         </div>
     </div>
-
     <div class="flame-graph-container">
         <svg id="flameGraph" width="100%" height="500"></svg>
     </div>
-
     <div class="stats" id="stats"></div>
 </div>
-
 <div class="tooltip" id="tooltip"></div>
-
 <script>
     class FlameGraph {
         constructor() {
@@ -367,79 +104,53 @@
             this.width = 1400;
             this.height = 500;
             this.charWidth = 7;
-
             this.initEventListeners();
         }
-
         initEventListeners() {
             document.getElementById('fileInput').addEventListener('change', (e) => this.loadFile(e));
             document.getElementById('searchBox').addEventListener('input', (e) => this.handleSearch(e));
             document.getElementById('exportSvg').addEventListener('click', () => this.exportSVG());
             document.getElementById('exportHtml').addEventListener('click', () => this.exportHTML());
-
-            const timeline = document.getElementById('timeline');
-            const marker = document.getElementById('timelineMarker');
-
-            let isDragging = false;
-
-            marker.addEventListener('mousedown', () => isDragging = true);
-            document.addEventListener('mouseup', () => isDragging = false);
-
-            timeline.addEventListener('click', (e) => this.handleTimelineClick(e));
-            document.addEventListener('mousemove', (e) => {
-                if (isDragging) this.handleTimelineDrag(e);
-            });
         }
-
         async loadFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             document.getElementById('fileName').textContent = file.name;
-
             const text = await file.text();
             this.parseData(text);
         }
-
         parseData(text) {
-            const lines = text.trim().split('\n');
-            this.allFrames = [];
+            try {
+                const data = JSON.parse(text);
+                this.allFrames = [];
 
-            lines.forEach(line => {
-                const parts = line.trim().split(' ');
-                if (parts.length < 2) return;
+                data.forEach(entry => {
+                    if (entry.type === "method_timing" && entry.stackTrace) {
+                        const stack = entry.stackTrace.slice().reverse(); // bottom to top
+                        const duration = Math.round(entry.durationMs * 1000); // microseconds
+                        this.allFrames.push({ stack, duration });
+                    }
+                });
 
-                const duration = parseInt(parts[parts.length - 1]);
-                const stack = parts.slice(0, -1).join(' ').split(';');
-
-                this.allFrames.push({ stack, duration });
-            });
-
-            if (this.allFrames.length > 0) {
-                document.getElementById('timelineContainer').style.display = 'block';
-                this.currentFrameIndex = 0;
-                this.renderFlameGraph();
-                this.updateStats();
+                if (this.allFrames.length > 0) {
+                    this.currentFrameIndex = 0;
+                    this.renderFlameGraph();
+                    this.updateStats();
+                } else {
+                    alert("No method timing data with stack trace found in JSON");
+                }
+            } catch (e) {
+                alert("Invalid JSON format");
             }
         }
-
         isPinningFrame(frameName) {
             const pinningPatterns = [
-                'synchronized',
-                'Object.wait',
-                'Thread.sleep',
-                'Native',
-                '.lock(',
-                'ReentrantLock',
-                'Semaphore',
-                'CountDownLatch'
+                'synchronized', 'Object.wait', 'Thread.sleep', 'Native', '.lock(', 'ReentrantLock', 'Semaphore', 'CountDownLatch'
             ];
             return pinningPatterns.some(p => frameName.includes(p));
         }
-
         getPinningType(frameName) {
-            if (frameName.includes('synchronized') || frameName.includes('.lock(') ||
-                frameName.includes('ReentrantLock')) {
+            if (frameName.includes('synchronized') || frameName.includes('.lock(') || frameName.includes('ReentrantLock')) {
                 return 'synchronized';
             }
             if (frameName.includes('Native') || frameName.includes('JNI')) {
@@ -447,41 +158,24 @@
             }
             return 'blocking';
         }
-
         getColor(frameName, duration) {
             if (this.isPinningFrame(frameName)) {
                 const type = this.getPinningType(frameName);
-                if (type === 'synchronized') {
-                    return '#ff4444'; // Burning red
-                } else if (type === 'native') {
-                    return '#ff9933'; // Orange
-                }
+                if (type === 'synchronized') return '#ff4444';
+                if (type === 'native') return '#ff9933';
                 return '#ffaa44';
             }
-
-            // Cool colors for non-blocking
-            if (duration < 1000) {
-                return '#43e97b'; // Green for fast
-            }
-            return '#4facfe'; // Blue for normal
+            if (duration < 1000) return '#43e97b';
+            return '#4facfe';
         }
-
         renderFlameGraph() {
             this.svg.innerHTML = '';
-
             const margin = { top: 20, right: 20, bottom: 20, left: 20 };
             const width = this.width - margin.left - margin.right;
             const height = this.height - margin.top - margin.bottom;
 
-            // Build hierarchy
             const root = { name: 'root', value: 0, children: [] };
-
-            const framesToRender = this.allFrames.slice(
-                this.currentFrameIndex,
-                this.currentFrameIndex + 100
-            );
-
-            framesToRender.forEach(frame => {
+            this.allFrames.forEach(frame => {
                 let current = root;
                 frame.stack.forEach(name => {
                     let child = current.children.find(c => c.name === name);
@@ -494,25 +188,17 @@
                 });
             });
 
-            // Calculate total for normalization
             const total = root.children.reduce((sum, c) => sum + c.value, 0);
-
-            // Render recursively
             const barHeight = 20;
-            let currentY = margin.top;
 
             const renderLevel = (nodes, x, availableWidth, depth) => {
-                if (depth > 30) return; // Prevent infinite recursion
-
+                if (depth > 30) return;
                 let currentX = x;
-
                 nodes.forEach(node => {
                     const nodeWidth = (node.value / total) * availableWidth;
+                    if (nodeWidth < 1) return;
 
-                    if (nodeWidth < 1) return; // Skip tiny frames
-
-                    const matchesSearch = !this.searchTerm ||
-                        node.name.toLowerCase().includes(this.searchTerm.toLowerCase());
+                    const matchesSearch = !this.searchTerm || node.name.toLowerCase().includes(this.searchTerm.toLowerCase());
 
                     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     rect.setAttribute('x', currentX);
@@ -520,35 +206,23 @@
                     rect.setAttribute('width', nodeWidth);
                     rect.setAttribute('height', barHeight - 1);
                     rect.setAttribute('class', 'flame-rect');
-
-                    const color = this.getColor(node.name, node.value);
-                    rect.setAttribute('fill', color);
-
-                    if (matchesSearch) {
-                        rect.setAttribute('opacity', '1');
-                    } else if (this.searchTerm) {
-                        rect.setAttribute('opacity', '0.3');
-                    }
+                    rect.setAttribute('fill', this.getColor(node.name, node.value));
+                    rect.setAttribute('opacity', matchesSearch ? '1' : '0.3');
 
                     rect.addEventListener('mouseenter', (e) => this.showTooltip(e, node));
                     rect.addEventListener('mouseleave', () => this.hideTooltip());
 
                     this.svg.appendChild(rect);
 
-                    // Add text if there's room
                     if (nodeWidth > 50) {
                         const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         text.setAttribute('x', currentX + 5);
                         text.setAttribute('y', depth * barHeight + margin.top + 14);
                         text.setAttribute('class', 'flame-text');
-
-                        const shortName = this.truncateText(node.name, nodeWidth);
-                        text.textContent = shortName;
-
+                        text.textContent = this.truncateText(node.name, nodeWidth);
                         this.svg.appendChild(text);
                     }
 
-                    // Render children
                     if (node.children.length > 0) {
                         renderLevel(node.children, currentX, nodeWidth, depth + 1);
                     }
@@ -556,82 +230,54 @@
                     currentX += nodeWidth;
                 });
             };
-
             renderLevel(root.children, margin.left, width, 0);
-
-            // Update timeline
-            this.updateTimelineLabel();
         }
-
         truncateText(text, width) {
             const maxChars = Math.floor(width / this.charWidth) - 2;
             if (text.length <= maxChars) return text;
             return text.substring(0, maxChars) + '..';
         }
-
         showTooltip(event, node) {
             const isPinned = this.isPinningFrame(node.name);
-            const pinningType = isPinned ? this.getPinningType(node.name) : null;
-
             let html = `<div class="tooltip-title">${node.name}</div>`;
             html += `<div class="tooltip-detail"><span class="tooltip-label">Duration:</span> ${(node.value / 1000).toFixed(2)} ms</div>`;
-            html += `<div class="tooltip-detail"><span class="tooltip-label">Samples:</span> ${node.value}</div>`;
-
             if (isPinned) {
-                html += `<div class="tooltip-detail"><span class="tooltip-label">⚠️ Status:</span> <span style="color: #ff4444; font-weight: bold;">PINNED</span></div>`;
-                html += `<div class="tooltip-detail"><span class="tooltip-label">Reason:</span> ${pinningType}</div>`;
-                html += `<div class="tooltip-detail" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2);">
-                    <span style="color: #ffaa44;">⚡ Carrier thread blocked - Virtual thread could not unmount</span>
-                </div>`;
+                html += `<div class="tooltip-detail"><span class="tooltip-label">⚠️ Status:</span> <span style="color: #ff4444;">PINNED</span></div>`;
             }
-
             this.tooltip.innerHTML = html;
             this.tooltip.style.display = 'block';
             this.tooltip.style.left = (event.pageX + 15) + 'px';
             this.tooltip.style.top = (event.pageY + 15) + 'px';
         }
-
         hideTooltip() {
             this.tooltip.style.display = 'none';
         }
-
         handleSearch(event) {
             this.searchTerm = event.target.value;
             this.renderFlameGraph();
         }
-
-        handleTimelineClick(event) {
-            const timeline = document.getElementById('timeline');
-            const rect = timeline.getBoundingClientRect();
-            const x = event.clientX - rect.left - 10;
-            const width = rect.width - 20;
-            const percentage = Math.max(0, Math.min(1, x / width));
-
-            this.currentFrameIndex = Math.floor(percentage * Math.max(0, this.allFrames.length - 100));
-            this.renderFlameGraph();
+        exportSVG() {
+            const svgData = this.svg.outerHTML;
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'vtracer-flamegraph.svg';
+            a.click();
+            URL.revokeObjectURL(url);
         }
-
-        handleTimelineDrag(event) {
-            this.handleTimelineClick(event);
+        exportHTML() {
+            const htmlContent = document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'vtracer-flamegraph.html';
+            a.click();
+            URL.revokeObjectURL(url);
         }
-
-        updateTimelineLabel() {
-            const label = document.getElementById('timelineLabel');
-            const marker = document.getElementById('timelineMarker');
-            const timeline = document.getElementById('timeline');
-            const rect = timeline.getBoundingClientRect();
-
-            const total = this.allFrames.length;
-            const end = Math.min(this.currentFrameIndex + 100, total);
-            label.textContent = `Frames ${this.currentFrameIndex + 1}-${end} / ${total}`;
-
-            const percentage = this.currentFrameIndex / Math.max(1, total - 100);
-            marker.style.left = (10 + percentage * (rect.width - 20)) + 'px';
-        }
-
         updateStats() {
             const statsDiv = document.getElementById('stats');
-
             let totalPinned = 0;
             let totalDuration = 0;
             let pinnedDuration = 0;
@@ -671,30 +317,7 @@
                 </div>
             `;
         }
-
-        exportSVG() {
-            const svgData = this.svg.outerHTML;
-            const blob = new Blob([svgData], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'vtracer-flamegraph.svg';
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        exportHTML() {
-            const htmlContent = document.documentElement.outerHTML;
-            const blob = new Blob([htmlContent], { type: 'text/html' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'vtracer-flamegraph.html';
-            a.click();
-            URL.revokeObjectURL(url);
-        }
     }
-
     const flameGraph = new FlameGraph();
 </script>
 </body>

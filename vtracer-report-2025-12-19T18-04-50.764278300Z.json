@@ -1,0 +1,14 @@
+[
+  {
+    "type": "virtual_thread_pinning",
+    "name": "tomcat-handler-0",
+    "timestamp": "2025-12-19T18:04:50.765275300Z",
+    "durationMs": 2002.385291
+  },
+  {
+    "type": "virtual_thread_pinning",
+    "name": "tomcat-handler-1",
+    "timestamp": "2025-12-19T18:04:57.784383200Z",
+    "durationMs": 2003.41702
+  }
+]

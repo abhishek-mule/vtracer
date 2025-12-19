@@ -6,18 +6,18 @@ import net.bytebuddy.matcher.ElementMatcher;
 import net.bytebuddy.matcher.ElementMatchers;
 import net.bytebuddy.description.type.TypeDescription;
 import java.lang.instrument.Instrumentation;
+import java.lang.StackTraceElement;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import jdk.jfr.consumer.RecordedThread;
 import jdk.jfr.consumer.RecordingStream;
 import org.yaml.snakeyaml.Yaml;
 import java.io.FileInputStream;
-import java.io.InputStream;
-import java.lang.StackTraceElement; // Added import
 
 public class Agent {
 
     private static RecordingStream rs;
-    public static VTracerConfig config;
+    private static VTracerConfig config;
 
     public static void premain(String agentArgs, Instrumentation inst) {
         config = loadConfig();
@@ -31,20 +31,42 @@ public class Agent {
 
     private static VTracerConfig loadConfig() {
         Yaml yaml = new Yaml();
-        try (InputStream input = new FileInputStream("vtracer-config.yml")) {
+        try (FileInputStream input = new FileInputStream("vtracer-config.yml")) {
             System.out.println("[vtracer] Loaded configuration from vtracer-config.yml");
             return yaml.loadAs(input, VTracerConfig.class);
         } catch (Exception e) {
-            System.out.println("[vtracer] Config file not found or invalid, using defaults");
+            System.out.println("[vtracer] Config file not found or invalid, using defaults: " + e.getMessage());
             return new VTracerConfig();
         }
     }
 
     private static void startInstrumentation(Instrumentation inst) {
+        System.out.printf("[vtracer] Agent loaded – sampling rate: %.0f%%, pinning detection: %b%n",
+                config.sampling.rate * 100, config.pinningDetection.enabled);
+
+        // JFR pinning detection
+        if (config.pinningDetection.enabled) {
+            rs = new RecordingStream();
+            rs.enable("jdk.VirtualThreadPinned");
+            rs.onEvent("jdk.VirtualThreadPinned", event -> {
+                if (MethodTimer.tracingEnabled) {
+                    long durationNs = event.getDuration().toNanos();
+                    RecordedThread recordedThread = event.getThread();
+                    String threadName = (recordedThread != null) ? recordedThread.getJavaName() : "unknown-thread";
+                    System.out.printf("[vtracer] ⚠️ PINNING DETECTED! Thread: %s, Duration: %d ns%n", threadName, durationNs);
+                    JsonReporter.addPinningEvent(threadName, durationNs);
+                }
+            });
+            rs.startAsync();
+        }
+
+        // Build type matcher from config
         ElementMatcher.Junction<TypeDescription> typeMatcher = ElementMatchers.none();
+
         for (String pkg : config.instrumentation.includePackages) {
             typeMatcher = typeMatcher.or(ElementMatchers.nameStartsWith(pkg));
         }
+
         for (String pkg : config.instrumentation.excludePackages) {
             typeMatcher = typeMatcher.and(ElementMatchers.not(ElementMatchers.nameStartsWith(pkg)));
         }
@@ -56,12 +78,14 @@ public class Agent {
                                 .on(ElementMatchers.isMethod()
                                         .and(ElementMatchers.not(ElementMatchers.isSynthetic())))))
                 .installOn(inst);
+
+        System.out.println("[vtracer] Instrumentation active with configured package filtering!");
     }
 
     // --- Configuration Classes ---
     public static class VTracerConfig {
         public Sampling sampling = new Sampling();
-        public InstrumentationConfig instrumentation = new InstrumentationConfig();
+        public Instrumentation instrumentation = new Instrumentation();
         public PinningDetection pinningDetection = new PinningDetection();
         public Overhead overhead = new Overhead();
 
@@ -69,35 +93,37 @@ public class Agent {
             public double rate = 0.10;
             public boolean enabled = true;
         }
-        public static class InstrumentationConfig {
+
+        public static class Instrumentation {
             public List<String> includePackages = List.of("com.example");
-            public List<String> excludePackages = List.of("java.", "sun.", "jdk.internal");
+            public List<String> excludePackages = List.of("java.", "sun.", "jdk.internal", "net.bytebuddy");
         }
-        public static class PinningDetection { public boolean enabled = true; }
-        public static class Overhead { public double circuitBreakerThresholdMs = 1000.0; }
+
+        public static class PinningDetection {
+            public boolean enabled = true;
+        }
+
+        public static class Overhead {
+            public double circuitBreakerThresholdMs = 1000.0;
+        }
     }
 
-    // --- Updated Advice Class ---
+    // --- Method Timer with Adaptive Sampling ---
     public static class MethodTimer {
         public static volatile boolean tracingEnabled = true;
 
-        // Internal cache to make sampling truly adaptive based on history
-        private static final ConcurrentHashMap<String, Double> history = new ConcurrentHashMap<>();
+        // Cache to remember last duration of each method for adaptive sampling
+        private static final ConcurrentHashMap<String, Double> methodHistory = new ConcurrentHashMap<>();
 
         @Advice.OnMethodEnter
         public static long enter(@Advice.Origin String methodName) {
-            if (!tracingEnabled || !Agent.config.sampling.enabled) return -1;
+            if (!tracingEnabled || !config.sampling.enabled) return -1;
 
-            // Adaptive sampling logic
-            double durationThresholdMs = 100.0;
-            double slowSamplingRate = 1.0;
-            double fastSamplingRate = 0.01;
+            // Adaptive sampling: slow methods (last > 100ms) → 100%, fast → 1%
+            Double lastDuration = methodHistory.get(methodName);
+            double rate = (lastDuration != null && lastDuration > 100.0) ? 1.0 : 0.01;
 
-            // Use history if available, otherwise use your random estimate logic
-            double lastDuration = history.getOrDefault(methodName, Math.random() * 2000);
-            double currentRate = (lastDuration > durationThresholdMs) ? slowSamplingRate : fastSamplingRate;
-
-            if (Math.random() > currentRate) return -1;
+            if (Math.random() > rate) return -1;
             return System.nanoTime();
         }
 
@@ -108,17 +134,13 @@ public class Agent {
             long durationNs = System.nanoTime() - startTime;
             double durationMs = durationNs / 1_000_000.0;
 
-            // Update history for adaptive sampling
-            history.put(methodName, durationMs);
+            // Stack trace capture kar
+            StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
 
             System.out.printf("[vtracer] [sampled] Method %s executed in %.2f ms%n", methodName, durationMs);
+            JsonReporter.addMethodTrace(methodName, durationMs, stackTrace); // 3 arguments
 
-            // Capture stack trace for flame graph
-            StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-            JsonReporter.addMethodTrace(methodName, durationMs, stackTrace);
-
-            // Circuit Breaker Check
-            if (durationMs > Agent.config.overhead.circuitBreakerThresholdMs) {
+            if (durationMs > config.overhead.circuitBreakerThresholdMs) {
                 tracingEnabled = false;
                 System.out.println("[vtracer] 🛑 CIRCUIT BREAKER OPENED – tracing disabled");
             }

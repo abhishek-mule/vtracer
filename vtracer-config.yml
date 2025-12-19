@@ -1,18 +1,18 @@
 sampling:
-  rate: 0.50   # 50% sampling – zyada logs aayenge
+  rate: 0.50
   enabled: true
 
 instrumentation:
-  include_packages:
+  includePackages:
     - "com.example.springtest"
-  exclude_packages:
+  excludePackages:
     - "java."
     - "sun."
     - "jdk.internal"
     - "net.bytebuddy"
 
-pinning_detection:
+pinningDetection:
   enabled: true
 
 overhead:
-  circuit_breaker_threshold_ms: 1000
+  circuitBreakerThresholdMs: 1000

@@ -1,0 +1,8 @@
+[
+  {
+    "type": "virtual_thread_pinning",
+    "name": "tomcat-handler-0",
+    "timestamp": "2025-12-19T17:41:03.214024500Z",
+    "durationMs": 2007.934889
+  }
+]
