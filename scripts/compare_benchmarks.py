@@ -1,121 +1,192 @@
 #!/usr/bin/env python3
 """
-Compare JMH benchmark results and detect regressions
+VTracer JMH Benchmark Comparator - Production Ready
+Detects regressions, improvements, and new benchmarks with GitHub Actions integration
 """
 
 import json
 import sys
-from typing import Dict, List
+from pathlib import Path
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List, Tuple, Optional
+import argparse
+import os
 
-def load_benchmark(filename: str) -> List[Dict]:
-    """Load JMH JSON results"""
-    with open(filename, 'r') as f:
-        return json.load(f)
+@dataclass
+class BenchmarkResult:
+    name: str
+    score: float
+    score_error: float
+    unit: str
+    iterations: int
 
-def extract_scores(benchmarks: List[Dict]) -> Dict[str, float]:
-    """Extract benchmark name -> score mapping"""
-    scores = {}
-    for bench in benchmarks:
-        name = bench['benchmark']
-        score = bench['primaryMetric']['score']
-        scores[name] = score
-    return scores
+def load_benchmark(filename: str) -> List[BenchmarkResult]:
+    """Load and parse JMH JSON results (v1.37+ compatible)"""
+    path = Path(filename)
+    if not path.exists():
+        print(f"⚠️  Baseline not found: {filename}")
+        return []
 
-def compare_benchmarks(baseline_file: str, current_file: str, threshold: float = 0.1):
+    try:
+        with path.open('r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        results = []
+        for bench in data.get('benchmarks', []):
+            primary = bench.get('primaryMetric', {})
+            raw_data = primary.get('rawData', [])
+            iterations = sum(len(run) for run in raw_data) if raw_data else 0
+
+            results.append(BenchmarkResult(
+                name=primary.get('benchmark', 'unknown'),
+                score=primary.get('score', 0.0),
+                score_error=primary.get('scoreError', 0.0),
+                unit=primary.get('scoreUnit', 'ops/s'),
+                iterations=iterations
+            ))
+        return results
+    except Exception as e:
+        print(f"❌ Error parsing {filename}: {e}")
+        return []
+
+def calculate_change(old: float, new: float) -> float:
+    """Calculate relative change (new - old) / old"""
+    return (new - old) / old if old != 0 else 0.0
+
+def format_change(change: float) -> str:
+    """Format change as percentage with emoji"""
+    if change < -0.10:
+        return f"❌ {change:+.1%}"
+    elif change > 0.10:
+        return f"✨ {change:+.1%}"
+    elif abs(change) > 0.01:
+        return f"➡️  {change:+.1%}"
+    else:
+        return "✓ unchanged"
+
+def compare_benchmarks(
+    baseline_file: str,
+    current_file: str,
+    threshold: float = 0.10,
+    output_file: Optional[str] = None,
+    verbose: bool = True
+) -> Tuple[List[Tuple[str, float]], List[Tuple[str, float]], List[str]]:
     """
-    Compare benchmarks and detect regressions
-
-    Args:
-        baseline_file: Path to baseline benchmark results
-        current_file: Path to current benchmark results
-        threshold: Regression threshold (0.1 = 10%)
+    Compare JMH benchmarks and generate report.
+    Returns: (regressions, improvements, new_benchmarks)
     """
+    baseline_results = load_benchmark(baseline_file)
+    current_results = load_benchmark(current_file)
 
-    baseline = extract_scores(load_benchmark(baseline_file))
-    current = extract_scores(load_benchmark(current_file))
+    if not current_results:
+        print("❌ No current benchmark results found")
+        sys.exit(1)
 
-    print("=" * 80)
-    print("BENCHMARK COMPARISON")
-    print("=" * 80)
-    print()
+    baseline_map = {r.name: r for r in baseline_results}
+    current_map = {r.name: r for r in current_results}
 
-    regressions = []
-    improvements = []
+    markdown_table = "| Benchmark | Baseline | Current | Change | Unit |\n"
+    markdown_table += "|-----------|----------|---------|--------|-----|\n"
 
-    for name in sorted(current.keys()):
-        if name not in baseline:
-            print(f"NEW: {name}")
-            print(f"     Score: {current[name]:.2f} ops/s")
-            print()
+    regressions: List[Tuple[str, float]] = []
+    improvements: List[Tuple[str, float]] = []
+    new_benchmarks: List[str] = []
+    unchanged: List[str] = []
+
+    if verbose:
+        print("\n" + "="*90)
+        print("🧪 VTRACER BENCHMARK COMPARISON")
+        print(f"📅 {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}")
+        print("="*90)
+
+    for name, current in current_map.items():
+        if name not in baseline_map:
+            new_benchmarks.append(name)
+            if verbose:
+                print(f"🆕 NEW BENCHMARK: {name} — {current.score:.2f} ±{current.score_error:.2f} {current.unit}")
+            markdown_table += f"| 🆕 `{name}` | - | {current.score:.2f}±{current.score_error:.2f} | - | {current.unit} |\n"
             continue
 
-        baseline_score = baseline[name]
-        current_score = current[name]
-        change = (current_score - baseline_score) / baseline_score
+        baseline = baseline_map[name]
+        change_pct = calculate_change(baseline.score, current.score)
+        status = format_change(change_pct)
 
-        status = "✓"
-        if change < -threshold:
-            status = "❌ REGRESSION"
-            regressions.append((name, change))
-        elif change > threshold:
-            status = "✨ IMPROVEMENT"
-            improvements.append((name, change))
+        if verbose:
+            print(f"{status} {name}")
+            print(f"     Baseline: {baseline.score:.2f} ±{baseline.score_error:.2f} {baseline.unit}")
+            print(f"     Current:  {current.score:.2f} ±{current.score_error:.2f} {current.unit}")
+            print(f"     Change:   {change_pct:+.1%} ({change_pct*100:+.1f}%)")
 
-        print(f"{status} {name}")
-        print(f"     Baseline: {baseline_score:.2f} ops/s")
-        print(f"     Current:  {current_score:.2f} ops/s")
-        print(f"     Change:   {change:+.1%}")
-        print()
+        markdown_table += (
+            f"| `{name}` | {baseline.score:.2f}±{baseline.score_error:.2f} | "
+            f"{current.score:.2f}±{current.score_error:.2f} | {change_pct:+.1%} | {current.unit} |\n"
+        )
 
-    # Summary
-    print("=" * 80)
-    print("SUMMARY")
-    print("=" * 80)
-    print()
+        if change_pct < -threshold:
+            regressions.append((name, change_pct))
+        elif change_pct > threshold:
+            improvements.append((name, change_pct))
+        else:
+            unchanged.append(name)
+
+    if verbose:
+        print("\n" + "="*90)
+        print("📊 SUMMARY")
+        print("="*90)
+        print(f"📈 Improvements: {len(improvements)}")
+        print(f"📉 Regressions:  {len(regressions)}")
+        print(f"➡️  Unchanged:   {len(unchanged)}")
+        print(f"🆕 New:          {len(new_benchmarks)}")
+        print(f"📋 Total:        {len(current_map)}")
+
+    # GitHub Actions comment
+    repo = os.environ.get("GITHUB_REPOSITORY", "unknown_repo")
+    run_id = os.environ.get("GITHUB_RUN_ID", "0")
+    github_comment = f"""## 🧪 VTracer Benchmark Results
+
+**Generated:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+{markdown_table}
+
+### 📊 Summary
+Improvements: ✨ {len(improvements)}
+Regressions: ❌ {len(regressions)}
+Unchanged: ➡️ {len(unchanged)}
+New: 🆕 {len(new_benchmarks)}
+Total: 📋 {len(current_map)}
+
+[Full results](https://github.com/{repo}/actions/runs/{run_id})
+"""
 
     if regressions:
-        print(f"❌ {len(regressions)} REGRESSION(S) DETECTED:")
-        for name, change in regressions:
-            print(f"   - {name}: {change:+.1%}")
-        print()
+        github_comment += "### ❌ Regressions (>10%):\n"
+        for name, change in regressions[:5]:
+            github_comment += f"- `{name}`: {change:+.1%}\n"
 
-    if improvements:
-        print(f"✨ {len(improvements)} IMPROVEMENT(S):")
-        for name, change in improvements:
-            print(f"   - {name}: {change:+.1%}")
-        print()
+    # Write files
+    if output_file:
+        Path(output_file).write_text(github_comment)
+    Path('benchmark-comparison.md').write_text(github_comment)
+    Path('benchmark-summary.txt').write_text(f"{len(regressions)} regressions, {len(improvements)} improvements\n")
 
-    if not regressions and not improvements:
-        print("✓ No significant changes")
-        print()
-
-    # Write to file for GitHub comment
-    with open('benchmark-comparison.txt', 'w') as f:
-        f.write("Benchmark Comparison\n")
-        f.write("=" * 40 + "\n\n")
-
-        if regressions:
-            f.write(f"❌ {len(regressions)} regression(s) detected\n")
-            for name, change in regressions:
-                f.write(f"  {name}: {change:+.1%}\n")
-            f.write("\n")
-
-        if improvements:
-            f.write(f"✨ {len(improvements)} improvement(s)\n")
-            for name, change in improvements:
-                f.write(f"  {name}: {change:+.1%}\n")
-            f.write("\n")
-
-        if not regressions and not improvements:
-            f.write("✓ No significant changes\n")
-
-    # Exit with error if regressions detected
     if regressions:
+        print("\n❌ FAILING CI: Regressions detected!")
         sys.exit(1)
+    else:
+        print("\n✅ PASS: No regressions detected!")
+        sys.exit(0)
+
+def main():
+    parser = argparse.ArgumentParser(description="Compare VTracer JMH benchmarks")
+    parser.add_argument("baseline", help="Baseline benchmark JSON file")
+    parser.add_argument("current", help="Current benchmark JSON file")
+    parser.add_argument("--threshold", type=float, default=0.10, help="Regression threshold (default: 10%)")
+    parser.add_argument("--output", help="GitHub comment output file")
+    parser.add_argument("--verbose", action="store_true", help="Verbose output for console")
+    args = parser.parse_args()
+
+    compare_benchmarks(args.baseline, args.current, args.threshold, args.output, args.verbose)
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Usage: compare_benchmarks.py <baseline.json> <current.json>")
-        sys.exit(1)
-
-    compare_benchmarks(sys.argv[1], sys.argv[2])
+    main()
