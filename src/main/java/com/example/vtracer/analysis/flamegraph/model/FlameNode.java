@@ -6,53 +6,53 @@ import java.util.List;
 /**
  * Node in a flame graph
  *
- * Represents a stack frame with accumulated time
+ * <p>Represents a stack frame with accumulated time
  */
 public class FlameNode {
 
-    private final String methodSignature;
-    private long selfTime;
-    private final List<FlameNode> children;
+  private final String methodSignature;
+  private long selfTime;
+  private final List<FlameNode> children;
 
-    public FlameNode(String methodSignature) {
-        this.methodSignature = methodSignature;
-        this.selfTime = 0;
-        this.children = new ArrayList<>();
+  public FlameNode(String methodSignature) {
+    this.methodSignature = methodSignature;
+    this.selfTime = 0;
+    this.children = new ArrayList<>();
+  }
+
+  public void addSelfTime(long time) {
+    this.selfTime += time;
+  }
+
+  public FlameNode getOrCreateChild(String methodSignature) {
+    for (FlameNode child : children) {
+      if (child.getMethodSignature().equals(methodSignature)) {
+        return child;
+      }
     }
 
-    public void addSelfTime(long time) {
-        this.selfTime += time;
-    }
+    FlameNode newChild = new FlameNode(methodSignature);
+    children.add(newChild);
+    return newChild;
+  }
 
-    public FlameNode getOrCreateChild(String methodSignature) {
-        for (FlameNode child : children) {
-            if (child.getMethodSignature().equals(methodSignature)) {
-                return child;
-            }
-        }
+  public String getMethodSignature() {
+    return methodSignature;
+  }
 
-        FlameNode newChild = new FlameNode(methodSignature);
-        children.add(newChild);
-        return newChild;
-    }
+  public long getSelfTime() {
+    return selfTime;
+  }
 
-    public String getMethodSignature() {
-        return methodSignature;
-    }
+  public List<FlameNode> getChildren() {
+    return children;
+  }
 
-    public long getSelfTime() {
-        return selfTime;
+  public long getTotalTime() {
+    long total = selfTime;
+    for (FlameNode child : children) {
+      total += child.getTotalTime();
     }
-
-    public List<FlameNode> getChildren() {
-        return children;
-    }
-
-    public long getTotalTime() {
-        long total = selfTime;
-        for (FlameNode child : children) {
-            total += child.getTotalTime();
-        }
-        return total;
-    }
+    return total;
+  }
 }

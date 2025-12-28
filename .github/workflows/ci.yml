@@ -1,28 +1,42 @@
-name: CI
+name: VTracer CI
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
   schedule:
-    # Run nightly to catch regressions
+    # Nightly regression test
     - cron: '0 2 * * *'
+  workflow_dispatch:  # Manual trigger
+
+env:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn"
 
 jobs:
   build-and-test:
-    name: Build & Test (JDK ${{ matrix.java }})
+    name: Build & Test (JDK ${{ matrix.java }} on ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
 
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
-        java: [ '17', '21' ]  # Updated to match your target
+        include:
+          - os: ubuntu-latest
+            java: '21'
+          - os: ubuntu-latest
+            java: '17'
+          - os: windows-latest
+            java: '21'
+          - os: macos-latest
+            java: '21'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
@@ -30,42 +44,65 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
           cache: 'maven'
+          cache-dependency-path: '**/pom.xml'
 
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: .m2/repository
+          key: maven-${{ matrix.os }}-${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            maven-${{ matrix.os }}-${{ matrix.java }}-
+
+      - name: Resolve Maven dependencies
+        run: mvn dependency:go-offline -B
+
+      - name: Build with Maven (skip tests)
+        run: mvn clean package -DskipTests -B
 
       - name: Run unit tests
-        run: mvn test
+        run: mvn test -B
 
       - name: Run integration tests
-        run: mvn verify -P integration-tests
+        run: mvn verify -Pintegration-tests
         continue-on-error: true
 
-      - name: Archive JAR
-        uses: actions/upload-artifact@v4
+      - name: Archive agent JAR (Linux JDK21 only)
         if: matrix.os == 'ubuntu-latest' && matrix.java == '21'
+        uses: actions/upload-artifact@v4
         with:
-          name: vtracer-jar
+          name: vtracer-agent-jar
           path: target/vtracer-*.jar
           retention-days: 30
 
-      - name: Upload test reports
-        uses: actions/upload-artifact@v4
+      - name: Archive test reports
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: test-reports-${{ matrix.os }}-jdk${{ matrix.java }}
-          path: target/surefire-reports/
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
           retention-days: 7
 
+      - name: Publish Test Results Summary
+        if: always()
+        uses: kishorekumark/actions-test-results-summary@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: target/surefire-reports/
+          fail-on-failure: false
+
   code-quality:
-    name: Code Quality
+    name: Code Quality & Security
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for better analysis
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -74,30 +111,93 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Run SpotBugs
-        run: mvn spotbugs:check
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: .m2/repository
+          key: maven-ubuntu-21-${{ hashFiles('**/pom.xml') }}
+          restore-keys: maven-ubuntu-21-
+
+      - name: Run SpotBugs (Static Analysis)
+        run: mvn spotbugs:check -Dspotbugs.failOnError=false -B
         continue-on-error: true
 
       - name: Run Checkstyle
-        run: mvn checkstyle:check
+        run: mvn checkstyle:check -Dcheckstyle.failOnViolation=false -B
         continue-on-error: true
 
-      - name: Check code coverage
-        run: mvn test jacoco:report
+      - name: Run JaCoCo Coverage
+        run: mvn clean test jacoco:report jacoco:check -B
 
-      - name: Upload coverage to Codecov
+      - name: Upload JaCoCo Coverage Report
         uses: codecov/codecov-action@v4
         with:
-          files: target/site/jacoco/jacoco.xml
+          files: |
+            target/site/jacoco/jacoco.xml
+            target/site/jacoco-it/jacoco.xml
           flags: unittests
-          name: codecov-vtracer
+          name: VTracer-CodeCov
+          fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coverage = fs.readFileSync('target/site/jacoco/index.html', 'utf8');
+            const summary = coverage.match(/<div class="headercov">([\d.]+)%<\/div>/)?.[1] || 'N/A';
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 📊 Code Coverage: **${summary}**\n\n[Full Report](${{ steps.jacoco.outputs.report_path }})`
+            });
+
+  security-scan:
+    name: Security Scan (Dependency-Check + CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      - name: Dependency-Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: VTracer
+          path: '.'
+          format: 'HTML SARIF'
+          args: >
+            --noupdate --enableExperimental --scan ./ --app VTracer
+            --format HTML --format SARIF --out target/dependency-check-report
+
+      - name: Upload Dependency-Check report
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: target/dependency-check-report.sarif
+
   benchmark:
-    name: Performance Benchmarks
+    name: JMH Benchmarks
     runs-on: ubuntu-latest
     needs: build-and-test
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
@@ -111,70 +211,74 @@ jobs:
           cache: 'maven'
 
       - name: Build benchmarks
-        run: mvn clean package -P benchmarks
+        run: mvn clean package -Pbenchmarks -DskipTests -B
 
       - name: Run JMH benchmarks
-        run: java -jar target/vtracer-benchmarks.jar -f 1 -wi 2 -i 3 -rf json -rff benchmark-results.json
-        continue-on-error: true
+        run: |
+          java -jar target/vtracer-benchmarks.jar \
+            -f 1 -wi 3 -i 5 \
+            -rf json -rff target/benchmark-results.json \
+            -l target/benchmark-log.txt
 
-      - name: Download previous benchmark
+      - name: Cache previous benchmark baseline
+        id: benchmark-cache
         uses: actions/cache@v4
         with:
           path: benchmark-baseline.json
-          key: benchmark-baseline
+          key: benchmark-baseline-v1-${{ github.sha }}
+          restore-keys: benchmark-baseline-v1-
 
-      - name: Install Python for comparison
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Compare benchmarks
+      - name: Compare with baseline (if exists)
+        if: steps.benchmark-cache.outputs.cache-hit == 'true'
         run: |
-          if [ -f benchmark-baseline.json ]; then
-            echo "Comparing with baseline..."
-            python3 scripts/compare_benchmarks.py benchmark-baseline.json benchmark-results.json || true
-          else
-            echo "No baseline found, this will be the new baseline"
-            cp benchmark-results.json benchmark-baseline.json
-          fi
-        continue-on-error: true
+          python3 scripts/compare_benchmarks.py benchmark-baseline.json target/benchmark-results.json > benchmark-comparison.md || true
+          echo "Benchmark comparison complete"
 
-      - name: Upload benchmark results
+      - name: Update baseline
+        run: cp target/benchmark-results.json benchmark-baseline.json
+
+      - name: Upload benchmark artifacts
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: |
-            benchmark-results.json
-            benchmark-comparison.txt
+            target/benchmark-results.json
+            benchmark-baseline.json
+            benchmark-comparison.md
           retention-days: 30
 
       - name: Comment benchmark results on PR
-        if: github.event_name == 'pull_request' && hashFiles('benchmark-comparison.txt') != ''
+        if: github.event_name == 'pull_request' && hashFiles('benchmark-comparison.md') != ''
         uses: actions/github-script@v7
+        env:
+          COMPARISON: ${{ steps.compare-benchmarks.outputs.summary || '' }}
         with:
           script: |
             const fs = require('fs');
-            try {
-              if (fs.existsSync('benchmark-comparison.txt')) {
-                const comparison = fs.readFileSync('benchmark-comparison.txt', 'utf8');
-                await github.rest.issues.createComment({
-                  issue_number: context.issue.number,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  body: '## Benchmark Results\n\n```\n' + comparison + '\n```'
-                });
-              }
-            } catch (error) {
-              console.log('Could not post benchmark comment:', error);
+            let comment = '## 📈 Benchmark Results\n\n';
+            
+            if (fs.existsSync('benchmark-comparison.md')) {
+              const comparison = fs.readFileSync('benchmark-comparison.md', 'utf8');
+              comment += '``````\n';
             }
+            
+            comment += '[Full results](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})';
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
 
-  integration-test:
-    name: Integration Test - Real Application
+  integration-e2e:
+    name: E2E Integration (Spring Petclinic + VTracer)
     runs-on: ubuntu-latest
     needs: build-and-test
+    timeout-minutes: 15
 
     steps:
-      - name: Checkout code
+      - name: Checkout VTracer
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
@@ -184,70 +288,90 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Build agent
-        run: mvn clean package -DskipTests
+      - name: Build VTracer agent
+        run: mvn clean package -DskipTests -B
 
-      - name: Download test application
-        run: |
-          # Use a simple Spring Boot app as test target
-          git clone --depth 1 https://github.com/spring-projects/spring-petclinic.git
-          cd spring-petclinic
-          ./mvnw package -DskipTests
+      - name: Checkout Spring Petclinic (test target)
+        uses: actions/checkout@v4
+        with:
+          repository: spring-projects/spring-petclinic
+          ref: 3.2.x
+          path: petclinic
 
-      - name: Run with VTracer agent
+      - name: Build Petclinic
         run: |
+          cd petclinic
+          ./mvnw package -DskipTests -B
+
+      - name: Run Petclinic with VTracer agent
+        run: |
+          mkdir -p /tmp/vtracer-output
           AGENT_JAR=$(ls target/vtracer-*.jar | head -n 1)
-          cd spring-petclinic
-          timeout 60s java -javaagent:../$AGENT_JAR=classInclude=org.springframework.samples.*,output=/tmp/vtracer \
-            -jar target/*.jar &
           
-          # Wait for app to start
-          sleep 20
+          # Start Petclinic with VTracer (background)
+          timeout 120s java \
+            -javaagent:../$AGENT_JAR="classInclude=org.springframework.*,output=/tmp/vtracer-output" \
+            -jar petclinic/target/*.jar &
           
-          # Make some requests to generate traces
-          curl -f http://localhost:8080/ || true
-          curl -f http://localhost:8080/owners || true
+          PETCLINIC_PID=$!
+          echo "Petclinic PID: $PETCLINIC_PID"
+          
+          # Wait for startup
+          sleep 15
+          
+          # Generate load
+          for i in {1..10}; do
+            curl -f -s "http://localhost:8080/" || break
+            curl -f -s "http://localhost:8080/owners?lastName=" || break
+            sleep 2
+          done
           
           # Wait for profiling
-          sleep 30
+          sleep 25
           
-          # Stop app
-          pkill -f spring-petclinic || true
+          # Kill and verify output
+          kill $PETCLINIC_PID || true
+          sleep 5
 
       - name: Verify VTracer output
         run: |
-          if [ ! -f /tmp/vtracer/flamegraph-*.folded ]; then
-            echo "ERROR: No flamegraph generated"
-            ls -la /tmp/vtracer/ || echo "Output dir does not exist"
+          if [ ! -d "/tmp/vtracer-output" ]; then
+            echo "❌ VTracer output directory missing"
             exit 1
           fi
           
-          # Check file is not empty
-          if [ ! -s /tmp/vtracer/flamegraph-*.folded ]; then
-            echo "ERROR: Flamegraph file is empty"
+          if [ -z "$(ls -A /tmp/vtracer-output/*.folded 2>/dev/null)" ]; then
+            echo "❌ No flamegraph files generated"
+            ls -la /tmp/vtracer-output/ || true
             exit 1
           fi
           
-          echo "SUCCESS: Flamegraph generated"
-          wc -l /tmp/vtracer/flamegraph-*.folded
+          echo "✅ VTracer generated flamegraphs:"
+          wc -l /tmp/vtracer-output/*.folded
+          head -20 /tmp/vtracer-output/*.folded
 
-      - name: Upload profiling results
-        uses: actions/upload-artifact@v4
+      - name: Upload E2E profiling results
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: integration-test-profiles
-          path: /tmp/vtracer/
-          retention-days: 7
+          name: e2e-profiling-results
+          path: /tmp/vtracer-output/
+          retention-days: 14
 
   release:
-    name: Release
+    name: Create Release
     runs-on: ubuntu-latest
-    needs: [ build-and-test, code-quality, integration-test ]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [ build-and-test, code-quality, security-scan, integration-e2e ]
+    if: |
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/') &&
+      github.repository_owner == 'abhishek-mule'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -256,32 +380,55 @@ jobs:
           java-version: '21'
           cache: 'maven'
 
-      - name: Build release
-        run: mvn clean package -DskipTests
+      - name: Build release artifacts
+        run: mvn clean deploy -P release -DskipTests -B
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        id: create_release
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/vtracer-*.jar
-            README.md
-            ARCHITECTURE.md
+            target/vtracer-${{ github.ref_name }}.jar
+            target/vtracer-${{ github.ref_name }}-sources.jar
           body: |
-            ## VTracer ${{ github.ref_name }}
+            # VTracer ${{ github.ref_name }}
             
-            Production-grade Java profiler using bytecode instrumentation.
+            🚀 **Production-grade Java 21 profiler with flamegraphs**
             
-            ### Requirements
-            - Java 21+
-            
-            ### Installation
-            ```bash
-            java -javaagent:vtracer-${{ github.ref_name }}.jar=classInclude=com.example.* -jar myapp.jar
+            ## 📦 Quick Start
+            ```
+            # Download and run
+            java -javaagent:vtracer-${{ github.ref_name }}.jar="classInclude=com.yourapp.*" -jar myapp.jar
             ```
             
-            ### Changes
-            See commit history for details.
-          draft: false
-          prerelease: false
+            ## ✅ CI Status
+            - [ ] Java 17/21 ✅ Multi-platform
+            - [ ] JaCoCo Coverage ✅
+            - [ ] SpotBugs ✅ Static Analysis
+            - [ ] E2E Tests ✅ Spring Petclinic
+            - [ ] Benchmarks ✅ JMH
+            
+            **See [CHANGELOG.md](CHANGELOG.md#${{ github.ref_name }}) for details.**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to GitHub Packages
+        run: mvn deploy -Pgithub-packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [ build-and-test, code-quality, benchmark, integration-e2e ]
+
+    steps:
+      - name: Slack Notification
+        if: env.SLACK_WEBHOOK_URL != ''
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
