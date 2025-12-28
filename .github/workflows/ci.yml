@@ -2,25 +2,286 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+  schedule:
+    # Run nightly to catch regressions
+    - cron: '0 2 * * *'
 
 jobs:
-  build:
+  build-and-test:
+    name: Build & Test (JDK ${{ matrix.java }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        java: [ '17', '21' ]  # Updated to match your target
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java }}
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Run unit tests
+        run: mvn test
+
+      - name: Run integration tests
+        run: mvn verify -P integration-tests
+        continue-on-error: true
+
+      - name: Archive JAR
+        uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.java == '21'
+        with:
+          name: vtracer-jar
+          path: target/vtracer-*.jar
+          retention-days: 30
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-${{ matrix.os }}-jdk${{ matrix.java }}
+          path: target/surefire-reports/
+          retention-days: 7
+
+  code-quality:
+    name: Code Quality
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
           distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
 
-      - name: Build with Maven
-        run: mvn -B clean package --file pom.xml
+      - name: Run SpotBugs
+        run: mvn spotbugs:check
+        continue-on-error: true
 
-      - name: Run tests (if any)
-        run: mvn -B test --file pom.xml
+      - name: Run Checkstyle
+        run: mvn checkstyle:check
+        continue-on-error: true
+
+      - name: Check code coverage
+        run: mvn test jacoco:report
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: target/site/jacoco/jacoco.xml
+          flags: unittests
+          name: codecov-vtracer
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build benchmarks
+        run: mvn clean package -P benchmarks
+
+      - name: Run JMH benchmarks
+        run: java -jar target/vtracer-benchmarks.jar -f 1 -wi 2 -i 3 -rf json -rff benchmark-results.json
+        continue-on-error: true
+
+      - name: Download previous benchmark
+        uses: actions/cache@v4
+        with:
+          path: benchmark-baseline.json
+          key: benchmark-baseline
+
+      - name: Install Python for comparison
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Compare benchmarks
+        run: |
+          if [ -f benchmark-baseline.json ]; then
+            echo "Comparing with baseline..."
+            python3 scripts/compare_benchmarks.py benchmark-baseline.json benchmark-results.json || true
+          else
+            echo "No baseline found, this will be the new baseline"
+            cp benchmark-results.json benchmark-baseline.json
+          fi
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-results.json
+            benchmark-comparison.txt
+          retention-days: 30
+
+      - name: Comment benchmark results on PR
+        if: github.event_name == 'pull_request' && hashFiles('benchmark-comparison.txt') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            try {
+              if (fs.existsSync('benchmark-comparison.txt')) {
+                const comparison = fs.readFileSync('benchmark-comparison.txt', 'utf8');
+                await github.rest.issues.createComment({
+                  issue_number: context.issue.number,
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  body: '## Benchmark Results\n\n```\n' + comparison + '\n```'
+                });
+              }
+            } catch (error) {
+              console.log('Could not post benchmark comment:', error);
+            }
+
+  integration-test:
+    name: Integration Test - Real Application
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build agent
+        run: mvn clean package -DskipTests
+
+      - name: Download test application
+        run: |
+          # Use a simple Spring Boot app as test target
+          git clone --depth 1 https://github.com/spring-projects/spring-petclinic.git
+          cd spring-petclinic
+          ./mvnw package -DskipTests
+
+      - name: Run with VTracer agent
+        run: |
+          AGENT_JAR=$(ls target/vtracer-*.jar | head -n 1)
+          cd spring-petclinic
+          timeout 60s java -javaagent:../$AGENT_JAR=classInclude=org.springframework.samples.*,output=/tmp/vtracer \
+            -jar target/*.jar &
+          
+          # Wait for app to start
+          sleep 20
+          
+          # Make some requests to generate traces
+          curl -f http://localhost:8080/ || true
+          curl -f http://localhost:8080/owners || true
+          
+          # Wait for profiling
+          sleep 30
+          
+          # Stop app
+          pkill -f spring-petclinic || true
+
+      - name: Verify VTracer output
+        run: |
+          if [ ! -f /tmp/vtracer/flamegraph-*.folded ]; then
+            echo "ERROR: No flamegraph generated"
+            ls -la /tmp/vtracer/ || echo "Output dir does not exist"
+            exit 1
+          fi
+          
+          # Check file is not empty
+          if [ ! -s /tmp/vtracer/flamegraph-*.folded ]; then
+            echo "ERROR: Flamegraph file is empty"
+            exit 1
+          fi
+          
+          echo "SUCCESS: Flamegraph generated"
+          wc -l /tmp/vtracer/flamegraph-*.folded
+
+      - name: Upload profiling results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-profiles
+          path: /tmp/vtracer/
+          retention-days: 7
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [ build-and-test, code-quality, integration-test ]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Build release
+        run: mvn clean package -DskipTests
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/vtracer-*.jar
+            README.md
+            ARCHITECTURE.md
+          body: |
+            ## VTracer ${{ github.ref_name }}
+            
+            Production-grade Java profiler using bytecode instrumentation.
+            
+            ### Requirements
+            - Java 21+
+            
+            ### Installation
+            ```bash
+            java -javaagent:vtracer-${{ github.ref_name }}.jar=classInclude=com.example.* -jar myapp.jar
+            ```
+            
+            ### Changes
+            See commit history for details.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
