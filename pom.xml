@@ -24,7 +24,7 @@
 
         <bytebuddy.version>1.14.9</bytebuddy.version>
         <jmh.version>1.37</jmh.version>
-        <junit.version>5.9.3</junit.version>
+        <junit.version>6.0.1</junit.version>
     </properties>
 
     <!-- ================= -->
