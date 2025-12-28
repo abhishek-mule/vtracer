@@ -1,5 +1,6 @@
 package com.example.vtracer;
 
+import com.example.vtracer.reporting.JsonReporter;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
 import net.bytebuddy.matcher.ElementMatcher;
