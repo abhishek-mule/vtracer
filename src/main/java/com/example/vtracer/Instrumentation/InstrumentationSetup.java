@@ -1,9 +1,12 @@
-package com.example.vtracer.instrumentation;
+package com.example.vtracer.Instrumentation;
 
 import com.example.vtracer.agent.VTracerAgent;
 import java.lang.instrument.Instrumentation;
 import net.bytebuddy.agent.builder.AgentBuilder;
 import net.bytebuddy.asm.Advice;
+import net.bytebuddy.matcher.ElementMatchers;
+
+import static net.bytebuddy.matcher.ElementMatchers.*;
 
 /** Sets up ByteBuddy instrumentation */
 public class InstrumentationSetup {
@@ -14,7 +17,7 @@ public class InstrumentationSetup {
             .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
             .with(AgentBuilder.InitializationStrategy.NoOp.INSTANCE)
             .with(AgentBuilder.TypeStrategy.Default.REDEFINE)
-            .ignore(context.getConfig().getClassMatcher().negate())
+            .ignore(ElementMatchers.nameStartsWith("com.example.vtracer"))
             .type(context.getConfig().getClassMatcher())
             .transform(
                 (builder, typeDescription, classLoader, module, protectionDomain) ->
@@ -42,8 +45,7 @@ public class InstrumentationSetup {
                       ClassLoader classLoader,
                       net.bytebuddy.utility.JavaModule module,
                       boolean loaded) {
-                    // Verbose logging disabled by default
-                    // System.out.println("[VTracer] Instrumented: " + typeName);
+                    // Instrumentation completion logging can be added here if needed
                   }
                 });
 

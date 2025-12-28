@@ -3,7 +3,9 @@ public class TestApp {
     System.out.println("Test app running...");
     try {
       Thread.sleep(3000);
-    } catch (Exception e) {
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      System.err.println("Test app interrupted: " + e.getMessage());
     }
     System.out.println("Test app finished");
   }

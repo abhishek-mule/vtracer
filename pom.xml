@@ -2,7 +2,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
@@ -20,6 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <checkstyle.skip>true</checkstyle.skip>
 
         <bytebuddy.version>1.14.9</bytebuddy.version>
         <jmh.version>1.37</jmh.version>
@@ -30,59 +31,75 @@
     <!-- Dependencies -->
     <!-- ================= -->
     <dependencies>
-
-        <!-- Byte Buddy core -->
+        <!-- Byte Buddy -->
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
             <version>${bytebuddy.version}</version>
         </dependency>
-
-        <!-- Byte Buddy agent helper -->
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy-agent</artifactId>
             <version>${bytebuddy.version}</version>
         </dependency>
 
-        <!-- JUnit -->
+        <!-- YAML Config -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>2.2</version>
+        </dependency>
+
+        <!-- JSON Reporting -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.17.2</version>
+        </dependency>
+
+        <!-- Logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.13</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.13</version>
+        </dependency>
+
+        <!-- Tests -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
-
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- Assertions -->
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>3.24.2</version>
             <scope>test</scope>
         </dependency>
-
-        <!-- JMH Benchmarks -->
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
             <artifactId>jmh-core</artifactId>
             <version>${jmh.version}</version>
             <scope>test</scope>
         </dependency>
-
         <dependency>
             <groupId>org.openjdk.jmh</groupId>
             <artifactId>jmh-generator-annprocess</artifactId>
             <version>${jmh.version}</version>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <!-- ================= -->
@@ -101,7 +118,7 @@
                 </configuration>
             </plugin>
 
-            <!-- Agent Fat JAR -->
+            <!-- Shade Plugin (Agent Fat JAR) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -109,9 +126,7 @@
                 <executions>
                     <execution>
                         <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
+                        <goals><goal>shade</goal></goals>
                         <configuration>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
@@ -139,17 +154,17 @@
                 </executions>
             </plugin>
 
-            <!-- Unit Tests -->
+            <!-- Surefire Plugin (Unit Tests) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.0.0</version>
                 <configuration>
-                    <argLine>@{argLine} --add-modules jdk.attach</argLine>
+                    <argLine>${argLine} --add-modules jdk.attach</argLine>
                 </configuration>
             </plugin>
 
-            <!-- Integration Tests -->
+            <!-- Failsafe Plugin (Integration Tests) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
@@ -163,14 +178,14 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <argLine>@{argLine} --add-modules jdk.attach</argLine>
+                    <argLine>${argLine} --add-modules jdk.attach</argLine>
                     <includes>
                         <include>**/*IT.java</include>
                     </includes>
                 </configuration>
             </plugin>
 
-            <!-- Code Coverage (JaCoCo) -->
+            <!-- JaCoCo Plugin -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -178,22 +193,16 @@
                 <executions>
                     <execution>
                         <id>prepare-agent</id>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
+                        <goals><goal>prepare-agent</goal></goals>
                     </execution>
                     <execution>
                         <id>report</id>
                         <phase>test</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
+                        <goals><goal>report</goal></goals>
                     </execution>
                     <execution>
-                        <id>jacoco-check</id>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
+                        <id>check</id>
+                        <goals><goal>check</goal></goals>
                         <configuration>
                             <rules>
                                 <rule>
@@ -231,9 +240,7 @@
                 </configuration>
                 <executions>
                     <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
+                        <goals><goal>check</goal></goals>
                     </execution>
                 </executions>
             </plugin>
@@ -242,44 +249,38 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>3.4.0</version>
                 <configuration>
                     <configLocation>google_checks.xml</configLocation>
-                    <skip>true</skip>
+                    <skip>${checkstyle.skip}</skip>
                     <encoding>UTF-8</encoding>
                     <consoleOutput>true</consoleOutput>
-                    <failsOnError>false</failsOnError>
+                    <failsOnError>true</failsOnError>
                     <violationSeverity>warning</violationSeverity>
                 </configuration>
                 <executions>
                     <execution>
                         <phase>validate</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
+                        <goals><goal>check</goal></goals>
                     </execution>
                 </executions>
             </plugin>
 
-            <!-- Spotless (Auto Code Formatter) -->
+            <!-- Spotless -->
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
                 <version>2.43.0</version>
                 <configuration>
                     <java>
-                        <googleJavaFormat>
-                            <style>GOOGLE</style>
-                        </googleJavaFormat>
+                        <googleJavaFormat><style>GOOGLE</style></googleJavaFormat>
                         <removeUnusedImports/>
                         <trimTrailingWhitespace/>
                     </java>
                 </configuration>
                 <executions>
                     <execution>
-                        <goals>
-                            <goal>apply</goal>
-                        </goals>
+                        <goals><goal>apply</goal></goals>
                     </execution>
                 </executions>
             </plugin>
@@ -304,9 +305,7 @@
                             <execution>
                                 <id>benchmark-jar</id>
                                 <phase>package</phase>
-                                <goals>
-                                    <goal>shade</goal>
-                                </goals>
+                                <goals><goal>shade</goal></goals>
                                 <configuration>
                                     <finalName>vtracer-benchmarks</finalName>
                                     <transformers>
@@ -323,25 +322,12 @@
             </build>
         </profile>
 
-        <!-- Integration Tests Profile -->
+        <!-- Integration Tests -->
         <profile>
             <id>integration-tests</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-failsafe-plugin</artifactId>
-                        <configuration>
-                            <includes>
-                                <include>**/*IT.java</include>
-                            </includes>
-                        </configuration>
-                    </plugin>
-                </plugins>
-            </build>
         </profile>
 
-        <!-- Strict Mode (for CI) -->
+        <!-- Strict Mode (CI) -->
         <profile>
             <id>strict</id>
             <build>

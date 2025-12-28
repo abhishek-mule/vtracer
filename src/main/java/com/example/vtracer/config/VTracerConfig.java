@@ -105,12 +105,18 @@ public class VTracerConfig {
 
   private static Map<String, String> parseArgs(String args) {
     Map<String, String> result = new HashMap<>();
+    if (args == null || args.isEmpty()) {
+      return result;
+    }
     String[] pairs = args.split(",");
 
     for (String pair : pairs) {
+      if (pair == null || pair.trim().isEmpty()) {
+        continue;
+      }
       String[] kv = pair.split("=", 2);
-      if (kv.length == 2) {
-        result.put(kv[0].trim(), kv[1].trim());
+      if (kv.length == 2 && kv[0] != null && !kv[0].trim().isEmpty()) {
+        result.put(kv[0].trim(), kv[1] != null ? kv[1].trim() : "");
       }
     }
 
@@ -135,12 +141,12 @@ public class VTracerConfig {
 
     // Apply custom exclude pattern
     if (classExcludePattern != null) {
-      matcher = matcher.and(not(nameMatches(classExcludePattern)));
+      matcher = matcher.and(not(nameMatches(classExcludePattern.pattern())));
     }
 
     // Apply custom include pattern
     if (classIncludePattern != null) {
-      matcher = matcher.and(nameMatches(classIncludePattern));
+      matcher = matcher.and(nameMatches(classIncludePattern.pattern()));
     }
 
     return matcher;

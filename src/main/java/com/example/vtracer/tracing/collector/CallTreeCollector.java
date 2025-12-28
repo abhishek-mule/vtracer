@@ -16,6 +16,9 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class CallTreeCollector {
 
+  private static final int MAX_STACK_DEPTH = 512;
+  private static final long ESTIMATED_OVERHEAD_NS_PER_CALL = 50;
+
   private final ThreadLocal<CallStack> stacks;
   private final Queue<TraceEvent> eventBuffer;
   private final int bufferCapacity;
@@ -23,6 +26,7 @@ public class CallTreeCollector {
   private final AtomicLong totalExits;
   private final AtomicLong droppedEvents;
   private final AtomicLong sampledEvents;
+  private final AtomicLong currentSize;
   private final long startTime;
 
   public CallTreeCollector(int bufferCapacity) {
@@ -33,6 +37,7 @@ public class CallTreeCollector {
     this.totalExits = new AtomicLong(0);
     this.droppedEvents = new AtomicLong(0);
     this.sampledEvents = new AtomicLong(0);
+    this.currentSize = new AtomicLong(0);
     this.startTime = System.nanoTime();
   }
 
@@ -42,7 +47,7 @@ public class CallTreeCollector {
     CallStack stack = stacks.get();
 
     // Check max depth to prevent runaway recursion
-    if (stack.depth() >= 512) {
+    if (stack.depth() >= MAX_STACK_DEPTH) {
       droppedEvents.incrementAndGet();
       stack.pushNoOp();
       return;
@@ -79,10 +84,10 @@ public class CallTreeCollector {
   }
 
   private void offerEvent(TraceEvent event) {
-    // Check buffer capacity (approximate - ConcurrentLinkedQueue.size() is O(n))
-    // Use atomic counter for efficiency
-    if (sampledEvents.get() < bufferCapacity) {
+    // Check buffer capacity using precise atomic counter
+    if (currentSize.get() < bufferCapacity) {
       eventBuffer.offer(event);
+      currentSize.incrementAndGet();
       sampledEvents.incrementAndGet();
     } else {
       droppedEvents.incrementAndGet();
@@ -99,6 +104,7 @@ public class CallTreeCollector {
     }
 
     sampledEvents.addAndGet(-events.size());
+    currentSize.addAndGet(-events.size());
 
     return events;
   }
@@ -115,8 +121,8 @@ public class CallTreeCollector {
       return 0.0;
     }
 
-    // Rough estimate: 50ns per instrumented call
-    long overheadNanos = totalEvents * 50;
+    // Rough estimate: ESTIMATED_OVERHEAD_NS_PER_CALL per instrumented call
+    long overheadNanos = totalEvents * ESTIMATED_OVERHEAD_NS_PER_CALL;
 
     return (double) overheadNanos / elapsedNanos;
   }
@@ -134,7 +140,7 @@ public class CallTreeCollector {
         w.write("overheadPercent: " + String.format("%.2f", getOverheadPercent() * 100) + "\n");
         w.write(
             "bufferUtilization: "
-                + String.format("%.2f", (double) sampledEvents.get() / bufferCapacity * 100)
+                + String.format("%.2f", (double) currentSize.get() / bufferCapacity * 100)
                 + "\n");
       }
     } catch (IOException e) {

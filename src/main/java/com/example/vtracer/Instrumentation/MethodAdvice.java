@@ -1,4 +1,4 @@
-package com.example.vtracer.instrumentation;
+package com.example.vtracer.Instrumentation;
 
 import com.example.vtracer.agent.VTracerAgent;
 import net.bytebuddy.asm.Advice;

@@ -1,6 +1,6 @@
 package com.example.vtracer.agent;
 
-import com.example.vtracer.instrumentation.InstrumentationSetup;
+import com.example.vtracer.Instrumentation.InstrumentationSetup;
 import java.lang.instrument.Instrumentation;
 
 /** Bootstraps the instrumentation setup */

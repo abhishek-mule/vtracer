@@ -10,6 +10,13 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class AdaptiveSampler implements Sampler {
 
+  private static final int MAX_STACK_DEPTH = 512;
+  private static final double OVERHEAD_HIGH_THRESHOLD_MULTIPLIER = 1.5;
+  private static final double OVERHEAD_LOW_THRESHOLD_MULTIPLIER = 0.5;
+  private static final double HIGH_OVERHEAD_REDUCTION_FACTOR = 0.7;
+  private static final double LOW_OVERHEAD_INCREASE_FACTOR = 1.1;
+  private static final int ADJUSTMENT_INTERVAL_SECONDS = 5;
+
   private volatile double sampleRate;
   private final double targetOverhead;
   private final int maxStackDepth;
@@ -17,7 +24,7 @@ public class AdaptiveSampler implements Sampler {
   public AdaptiveSampler(double initialSampleRate, double targetOverhead) {
     this.sampleRate = initialSampleRate;
     this.targetOverhead = targetOverhead;
-    this.maxStackDepth = 512;
+    this.maxStackDepth = MAX_STACK_DEPTH;
   }
 
   @Override
@@ -36,15 +43,15 @@ public class AdaptiveSampler implements Sampler {
     double currentRate = sampleRate;
 
     // If overhead is too high, back off aggressively
-    if (measuredOverhead > targetOverhead * 1.5) {
-      sampleRate = Math.max(0.001, currentRate * 0.7); // Reduce by 30%
+    if (measuredOverhead > targetOverhead * OVERHEAD_HIGH_THRESHOLD_MULTIPLIER) {
+      sampleRate = Math.max(0.001, currentRate * HIGH_OVERHEAD_REDUCTION_FACTOR);
       System.out.printf(
           "[VTracer] Overhead high (%.2f%%), reducing sample rate to %.2f%%%n",
           measuredOverhead * 100, sampleRate * 100);
     }
     // If overhead is low, ramp up cautiously
-    else if (measuredOverhead < targetOverhead * 0.5) {
-      sampleRate = Math.min(1.0, currentRate * 1.1); // Increase by 10%
+    else if (measuredOverhead < targetOverhead * OVERHEAD_LOW_THRESHOLD_MULTIPLIER) {
+      sampleRate = Math.min(1.0, currentRate * LOW_OVERHEAD_INCREASE_FACTOR);
       if (sampleRate != currentRate) {
         System.out.printf(
             "[VTracer] Overhead low (%.2f%%), increasing sample rate to %.2f%%%n",
